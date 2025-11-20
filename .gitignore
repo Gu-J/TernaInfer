@@ -5,5 +5,8 @@ kernels/*.so
 kernels/test_kernel
 
 __pycache__/
+**/__pycache__/
 
 git_push.sh
+
+checkpoints/

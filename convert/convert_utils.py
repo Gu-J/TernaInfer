@@ -7,48 +7,39 @@ from typing import Tuple, List
 
 @torch.jit.script
 def reorder_weight(weight: torch.Tensor):
-        # 预生成 tile 内索引，只计算一次
     ii = torch.arange(16).view(16, 1).expand(16, 16)
     kk = torch.arange(16).view(1, 16).expand(16, 16)
 
-    # flatten 索引方便 vectorized scatter
     ii_flat = ii.flatten()
     kk_flat = kk.flatten()
 
-    # 预计算 tile 内对应的 reordered 索引
     reordered_i = ii_flat.clone()
     reordered_k = ((kk_flat + 1) // 2).clone()
 
-    # 上半部分规则
     mask_upper = ii_flat < 8
     mask_lower = ~mask_upper
 
-    # 处理上半部分
     need_adjust_upper = ((kk_flat & 2) != 0) & mask_upper
     reordered_i[need_adjust_upper] += 8
     reordered_k[need_adjust_upper] -= 1
 
-    # 下半部分偏移
     reordered_k[mask_lower] += 8
     need_adjust_lower = ((kk_flat & 2) == 0) & mask_lower
     reordered_i[need_adjust_lower] -= 8
     reordered_k[mask_lower & ~need_adjust_lower] -= 1
 
-    # 展平后构造映射矩阵 (tile 内相对位置)
     src_idx = ii_flat * 16 + kk_flat
     dst_idx = reordered_i * 16 + reordered_k
 
-    # 构造 tile 内的重排映射，用于快速 gather/scatter
     reorder_map = torch.empty(256, dtype=torch.int64)
     reorder_map[dst_idx] = src_idx
 
     assert weight.dtype == torch.int8
     M_Global, K_Global = weight.shape
-    assert M_Global % 16 == 0 and K_Global % 16 == 0, "尺寸必须是16的倍数"
-
+    assert M_Global % 16 == 0 and K_Global % 16 == 0, "Must be a multiple of 16"
     A_h = torch.empty_like(weight, dtype=torch.int8)
 
-    # === 主循环 ===
+
     for i in range(0, M_Global, 16):
         for k in range(0, K_Global, 16):
             block = weight[i:i+16, k:k+16].flatten()

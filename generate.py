@@ -25,7 +25,7 @@ from xformers.ops.fmha.attn_bias import (
 
 @dataclass
 class GenArgs:
-    gen_length: int = 32
+    gen_length: int = 64
     gen_bsz: int = 1
     prompt_length: int = 64
 
@@ -59,9 +59,9 @@ class FastGen:
         torch.set_default_device(device)
         torch.set_default_dtype(torch.bfloat16)
 
-        ckpt_path = str(Path(ckpt_dir) / "model_state_sp.pt")
-        # checkpoint = torch.load(ckpt_path, map_location="cpu")
-        checkpoint = torch.load(ckpt_path, map_location=device)
+        ternary_weights = torch.load(str(Path(ckpt_dir) / "model_TernaInfer_TernaryWeights.pt"), map_location=device)
+        non_ternary=torch.load(str(Path(ckpt_dir) / "model_embeddings_and_norms_non_ternary.pt"), map_location=device)
+        checkpoint=ternary_weights | non_ternary
 
         model = fast.Transformer(model_args,checkpoint)
 

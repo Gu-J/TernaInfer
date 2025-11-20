@@ -31,10 +31,11 @@ pip install -r requirements.txt
 # Download and convert the BitNet-b1.58-2B model
 mkdir checkpoints
 huggingface-cli download microsoft/bitnet-b1.58-2B-4T-bf16 --local-dir ./checkpoints/bitnet-b1.58-2B-4T-bf16
-# python ./convert_safetensors.py --safetensors_file ./checkpoints/bitnet-b1.58-2B-4T-bf16/model.safetensors --output checkpoints/model_state.pt --model_name 2B
-# python ./convert_checkpoint.py --input ./checkpoints/model_state.pt
-# rm ./checkpoints/model_state.pt
+
+python ./convert/convert_safetensors.py --safetensors_file ./checkpoints/bitnet-b1.58-2B-4T-bf16/model.safetensors --output checkpoints/model_bf16.pt --model_name 2B
+
+python convert/convert_TernaInfer.py --input checkpoints/model_bf16.pt
 
 # Inference
-# python3 ./generate.py ./checkpoints/ --interactive --chat_format
+python ./generate.py ./checkpoints/ --interactive --chat_format
 ```
