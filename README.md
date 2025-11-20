@@ -8,7 +8,7 @@ Build the kernel:
 
 ```bash
 # Build libternaspmm.so
-# Tests were conducted on an RTX A6000 GPU, so the kernel is compiled with -arch=sm_86.
+# Note: The implementation has been tested on an NVIDIA RTX A6000 GPU and compiled with -arch=sm_86
 cd kernels
 bash compile.sh
 cd ..

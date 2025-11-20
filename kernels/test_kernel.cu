@@ -284,35 +284,35 @@ int main(int argc, char** argv)
         exit(-1);
     }
 
-    PROFILE_MEMCPY(mybitmap_TileOffsets_global_gpu_v3_copy,
+    PROFILE_MEMCPY(TileOffsets,
                 mybitmap_TileOffsets_global_gpu_v3,
                 mybitmap_TileOffsets_global_cpu_v3,
                 sizeof(int) * (mynum_gtilesv3 + 1),
                 cudaMemcpyHostToDevice);
     free(mybitmap_TileOffsets_global_cpu_v3);
 
-    PROFILE_MEMCPY(mybitmap_TileOffsets_median_gpu_v3_copy,
+    PROFILE_MEMCPY(WarpOffsets,
                 mybitmap_TileOffsets_median_gpu_v3,
                 mybitmap_TileOffsets_median_cpu_v3,
                 sizeof(uint16_t) * mynum_mtilesv3,
                 cudaMemcpyHostToDevice);
     free(mybitmap_TileOffsets_median_cpu_v3);
 
-    PROFILE_MEMCPY(mybitmap_gpu_v3_copy,
+    PROFILE_MEMCPY(Global_Bitmap,
                 mybitmap_gpu_v3,
                 mybitmap_cpu_v3,
                 sizeof(uint64_t) * mynum_ltilesv3,
                 cudaMemcpyHostToDevice);
     cudaFreeHost(mybitmap_cpu_v3);
 
-    PROFILE_MEMCPY(myCompressed_Val_gpu_v3_copy,
+    PROFILE_MEMCPY(Global_Values_Array,
                 myCompressed_Val_gpu_v3,
                 myCompressed_Val_cpu_v3,
                 myval_count_v3/8,
                 cudaMemcpyHostToDevice);
     free(myCompressed_Val_cpu_v3);
 
-    PROFILE_MEMCPY(myx_copy,
+    PROFILE_MEMCPY(Input_Activation,
                 myx,
                 myx_h,
                 sizeof(int8_t) * M * K,
@@ -416,7 +416,7 @@ int main(int argc, char** argv)
       
     free(myX_SpMM_hbitmapv3);
     free(X_cublas_h);
-    PrintPerformance("SpBitnet", mymilliseconds_SpMM_bitmapv3, mytflops_SpMM_bitmapv3, mytotalError_SpMM_bitmapv3);
+    PrintPerformance("TernaSpMM", mymilliseconds_SpMM_bitmapv3, mytflops_SpMM_bitmapv3, mytotalError_SpMM_bitmapv3);
     PrintPerformance("CuBlas_TC", milliseconds_cublas_tc, tflops_cublas_tc, 0.0);
 
     free(x_h);
