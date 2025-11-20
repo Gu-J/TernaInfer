@@ -1,0 +1,5 @@
+chat.sh
+
+kernels/*.so
+
+kernels/test_kernel
