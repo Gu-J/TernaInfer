@@ -7,7 +7,7 @@ This repository is tailored for use with the [BitNet-b1.58-2B-4T](https://arxiv.
 Build the kernel:
 
 ```bash
-# Build the kernel
+# Build libternaspmm.so
 # Tests were conducted on an RTX A6000 GPU, so the kernel is compiled with -arch=sm_86.
 cd kernels
 bash compile.sh
@@ -31,9 +31,7 @@ pip install -r requirements.txt
 # Download and convert the BitNet-b1.58-2B model
 mkdir checkpoints
 huggingface-cli download microsoft/bitnet-b1.58-2B-4T-bf16 --local-dir ./checkpoints/bitnet-b1.58-2B-4T-bf16
-
 python ./convert/convert_safetensors.py --safetensors_file ./checkpoints/bitnet-b1.58-2B-4T-bf16/model.safetensors --output checkpoints/model_bf16.pt --model_name 2B
-
 python convert/convert_TernaInfer.py --input checkpoints/model_bf16.pt
 
 # Inference
