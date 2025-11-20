@@ -4,6 +4,6 @@ kernels/*.so
 
 kernels/test_kernel
 
-__*
+__*/
 
 git_push.sh

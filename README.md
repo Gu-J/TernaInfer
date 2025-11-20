@@ -13,7 +13,7 @@ cd kernels
 bash compile.sh
 cd ..
 
-# Run performance test
+# Run a simple test
 ./kernels/test_kernel 8 2560 2560 45 7
 
 ```
