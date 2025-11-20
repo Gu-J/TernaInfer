@@ -1,18 +1,3 @@
-/***************************************************************************
- * Copyright 2025 The SpInfer Authors. All rights reserved.
- * Copyright 2023 The FLash-LLM Authors. All rights reserved.
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- ***************************************************************************/
-
-
 #include "src/SpMM_API.cuh"
 
 extern "C" void checkLastCudaError(int line)
@@ -53,24 +38,13 @@ extern "C" void bitlinear_TernaSpMM(int8_t* input0,
 
 }
 
+
+
+
+
 //////////////////////////////// helper functions ////////////////////////////////
 
-__global__ void kernel_sleep(double us)
-{
-    if (threadIdx.x == 0)
-    {
-        double gpu_clock_hz =  1800*1e6;
-        unsigned long long start = clock64();
-        unsigned long long wait_cycles = (unsigned long long)(us * 1e-6 * gpu_clock_hz);
-        while (clock64() - start < wait_cycles);
-    }
-    __syncthreads();
-}
 
-extern "C" void gpu_sleep(double sleep_us,cudaStream_t stream)
-{
-    kernel_sleep<<<1, 32,0,stream>>>(sleep_us);
-}
 
 extern "C" void reorder_WT_h(__nv_bfloat16* WT_h, __nv_bfloat16* reordered_WT_h, int N, int K)
 {
@@ -281,3 +255,20 @@ extern "C" int myInitSparseMatrix_bitmap(
     return num_global_tiles;
 }
 
+
+__global__ void kernel_sleep(double us)
+{
+    if (threadIdx.x == 0)
+    {
+        double gpu_clock_hz =  1800*1e6;
+        unsigned long long start = clock64();
+        unsigned long long wait_cycles = (unsigned long long)(us * 1e-6 * gpu_clock_hz);
+        while (clock64() - start < wait_cycles);
+    }
+    __syncthreads();
+}
+
+extern "C" void gpu_sleep(double sleep_us,cudaStream_t stream)
+{
+    kernel_sleep<<<1, 32,0,stream>>>(sleep_us);
+}
