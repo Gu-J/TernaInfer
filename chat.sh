@@ -1,1 +1,0 @@
-python3 ./generate.py /home/gj/code/BitNet/gpu/checkpoints --chat_format --interactive
