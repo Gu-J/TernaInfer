@@ -3,3 +3,7 @@ chat.sh
 kernels/*.so
 
 kernels/test_kernel
+
+__*
+
+git_push.sh
