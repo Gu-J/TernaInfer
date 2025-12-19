@@ -8,7 +8,7 @@ Build the kernel:
 
 ```bash
 # Build libternaspmm.so
-# Note: The implementation has been tested on an NVIDIA RTX A6000 GPU and compiled with -arch=sm_86
+# Note: The implementation has been tested on an NVIDIA RTX A6000 GPU (compiled with -arch=sm_86)
 cd kernels
 bash compile.sh
 cd ..
@@ -41,9 +41,9 @@ python ./generate.py ./checkpoints/ --interactive --chat_format --BF16
 
 ```
 
-<!-- ## References
+## References
 
 Our implementation is inspired by and references the following projects:
 
 - https://github.com/microsoft/BitNet/tree/main/gpu  
-- https://github.com/HPMLL/SpInfer_EuroSys25 -->
+- https://github.com/HPMLL/SpInfer_EuroSys25
