@@ -113,6 +113,26 @@ class SpBitLinear(nn.Module):
                                         s, self.weight_scale,
                                         self.out_features)
 
+class BF16BitLinear(nn.Module):
+    in_features: int
+    out_features: int
+    weight: torch.Tensor
+
+    def __init__(self, in_features:int, out_features:int, dic: dict, key: str,bias: bool = False, ):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = torch.nn.Parameter(dic[key+".weight"], requires_grad=False)
+
+    @torch.compile
+    def quant_input(self, input):
+        s = 127 / input.abs().max(dim=-1, keepdim=True).values.clamp_(min=1e-5)
+        return (input * s).round().clamp(-128, 127) / s
+
+    def forward(self, input):
+        input = self.quant_input(input)
+        return F.linear(input, self.weight)
+
 class Attention(nn.Module):
     def __init__(
         self,
@@ -134,7 +154,7 @@ class Attention(nn.Module):
         self.n_local_heads = n_heads
         self.n_local_kv_heads = n_kv_heads
 
-        Linear = SpBitLinear
+        Linear = SpBitLinear if use_kernel else BF16BitLinear
 
         self.wqkv = Linear(
             dim,
@@ -214,7 +234,7 @@ class FeedForward(nn.Module):
     ):
         super().__init__()
 
-        Linear = SpBitLinear
+        Linear = SpBitLinear if use_kernel else BF16BitLinear
 
         self.w13 = Linear(
             dim,

@@ -41,6 +41,7 @@ class FastGen:
     @staticmethod
     def build(
         ckpt_dir: str,
+        BF16: bool,
         gen_args: GenArgs,
         device: Union[torch.device, str],
         tokenizer_path: Optional[str] = None,
@@ -53,15 +54,19 @@ class FastGen:
         """
         start_time = time.time()
 
-        model_args = fast.ModelArgs(use_kernel=True)
         tokenizer = Tokenizer("./tokenizer.model")
 
         torch.set_default_device(device)
         torch.set_default_dtype(torch.bfloat16)
 
-        ternary_weights = torch.load(str(Path(ckpt_dir) / "model_TernaInfer_TernaryWeights.pt"), map_location=device)
-        non_ternary=torch.load(str(Path(ckpt_dir) / "model_embeddings_and_norms_non_ternary.pt"), map_location=device)
-        checkpoint=ternary_weights | non_ternary
+        if BF16:
+            model_args = fast.ModelArgs(use_kernel=False)
+            checkpoint = torch.load(str(Path(ckpt_dir) / "model_bf16.pt"), map_location=device)
+        else:
+            model_args = fast.ModelArgs(use_kernel=True)
+            ternary_weights = torch.load(str(Path(ckpt_dir) / "model_TernaInfer_TernaryWeights.pt"), map_location=device)
+            non_ternary = torch.load(str(Path(ckpt_dir) / "model_embeddings_and_norms_non_ternary.pt"), map_location=device)
+            checkpoint = ternary_weights | non_ternary
 
         model = fast.Transformer(model_args,checkpoint)
 
@@ -320,13 +325,13 @@ def get_prompts(interactive: bool) -> Iterable[list[str]]:
             yield ["Hello, my name is"] * bsz
 
 
-def main(ckpt_dir: str, interactive: bool = False, chat_format: bool = False, sampling: bool = False):
+def main(ckpt_dir: str, interactive: bool = False, chat_format: bool = False, BF16: bool = False,sampling: bool = False):
 
     local_rank = 0
     device = f"cuda:{local_rank}"
     torch.cuda.set_device(local_rank)
 
-    g = FastGen.build(ckpt_dir, GenArgs(), device)
+    g = FastGen.build(ckpt_dir, BF16, GenArgs(), device)
 
     if chat_format:
         g.tokenizer = ChatFormat(g.tokenizer)
@@ -353,9 +358,6 @@ def main(ckpt_dir: str, interactive: bool = False, chat_format: bool = False, sa
 
         for phase_stats in stats.phases:
             print(phase_stats.show())
-
-        print(f"Memory used: {torch.cuda.max_memory_reserved() / 1e9:.02f} GB")
-
 
 if __name__ == "__main__":
     fire.Fire(main)

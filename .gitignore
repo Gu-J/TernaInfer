@@ -10,3 +10,5 @@ __pycache__/
 git_push.sh
 
 checkpoints/
+
+mytest_need_delete.py

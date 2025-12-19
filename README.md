@@ -31,9 +31,19 @@ pip install -r requirements.txt
 # Download and convert the BitNet-b1.58-2B model
 mkdir checkpoints
 huggingface-cli download microsoft/bitnet-b1.58-2B-4T-bf16 --local-dir ./checkpoints/bitnet-b1.58-2B-4T-bf16
-python ./convert/convert_safetensors.py --safetensors_file ./checkpoints/bitnet-b1.58-2B-4T-bf16/model.safetensors --output checkpoints/model_bf16.pt --model_name 2B
-python convert/convert_TernaInfer.py --input checkpoints/model_bf16.pt
+python ./convert/convert_TernaInfer.py --safetensors_file ./checkpoints/bitnet-b1.58-2B-4T-bf16/model.safetensors --output_dir ./checkpoints --model_name 2B
 
 # Inference
 python ./generate.py ./checkpoints/ --interactive --chat_format
+# Prefill optimizations will be added soon.
+# Compare with standard BF16 model
+python ./generate.py ./checkpoints/ --interactive --chat_format --BF16
+
 ```
+
+<!-- ## References
+
+Our implementation is inspired by and references the following projects:
+
+- https://github.com/microsoft/BitNet/tree/main/gpu  
+- https://github.com/HPMLL/SpInfer_EuroSys25 -->
