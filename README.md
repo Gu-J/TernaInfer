@@ -10,6 +10,7 @@ Build the kernel:
 # Build libternaspmm.so
 # Note: The implementation has been tested on an NVIDIA RTX A6000 GPU (compiled with -arch=sm_86)
 cd kernels
+git clone -b v4.3.4 --depth 1 https://github.com/NVIDIA/cutlass.git
 bash compile.sh
 cd ..
 
@@ -47,3 +48,4 @@ Our implementation is inspired by and references the following projects:
 
 - https://github.com/microsoft/BitNet/tree/main/gpu  
 - https://github.com/HPMLL/SpInfer_EuroSys25
+- https://github.com/NVIDIA/cutlass

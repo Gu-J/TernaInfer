@@ -3,15 +3,14 @@
 # This source code is licensed under the BSD license found in the
 # LICENSE file in the root directory of this source tree.
 
-import json
 import os
-import readline  # type: ignore # noqa
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Tuple, Union
-
+import random
+import string
 import fire
 import model as fast
 import torch
@@ -27,7 +26,7 @@ from xformers.ops.fmha.attn_bias import (
 class GenArgs:
     gen_length: int = 64
     gen_bsz: int = 1
-    prompt_length: int = 64
+    prompt_length: int = 2048
 
     use_sampling: bool = False
     temperature: float = 0.8
@@ -149,6 +148,18 @@ class FastGen:
             torch.cuda.synchronize()
 
             return self._prefill_logits
+        
+        # def replay(tokens, seq_lens=None):
+        #     self._prefill_inputs[0].copy_(tokens)
+        #     if seq_lens is not None:
+        #         self._prefill_inputs[1].k_seqinfo.seqlen.copy_(seq_lens)
+            
+        #     logits = self.model.forward_with_attn_bias(
+        #         token_values=self._prefill_inputs[0],
+        #         attn_bias=self._prefill_inputs[1],
+        #         cache=self._cache,
+        #     )
+        #     return logits
 
         return replay
 
@@ -219,7 +230,7 @@ class FastGen:
         max_prompt_length = max(prompt_lens)
         gen_length = self.gen_args.gen_length
         max_seq_length = max_prompt_length + gen_length
-        print(max_prompt_length, gen_length)
+        # print(max_prompt_length, gen_length)
 
         bias = AttnBias.from_seqlens(
             q_seqlen=padded_prompt_lens,
@@ -322,7 +333,8 @@ def get_prompts(interactive: bool) -> Iterable[list[str]]:
     else:
         while True:
             input("Press Enter to generate next batch...")
-            yield ["Hello, my name is"] * bsz
+            random_string = "hi "*(GenArgs().prompt_length-10)
+            yield [random_string] * bsz
 
 
 def main(ckpt_dir: str, interactive: bool = False, chat_format: bool = False, BF16: bool = False,sampling: bool = False):
@@ -345,7 +357,7 @@ def main(ckpt_dir: str, interactive: bool = False, chat_format: bool = False, BF
             g.tokenizer.eot_id = g.tokenizer.eos_id
             tokens = [g.tokenizer.encode(x, bos=False, eos=False) for x in prompts]
 
-        print(tokens)
+        print(len(tokens[0]))
         stats, out_tokens = g.generate_all(
             tokens, use_cuda_graphs="NO_CUDA_GRAPHS" not in os.environ, use_sampling=sampling,
         )

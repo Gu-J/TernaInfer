@@ -16,12 +16,15 @@ from xformers.ops.fmha.attn_bias import (
 )
 
 import ctypes
+
 TernaSpMM_lib = ctypes.CDLL('./kernels/libternaspmm.so')
 
-def TernaInfer_linear(input, 
-                            compressed_val, TileOffsets_global,TileOffsets_median, bitmap,
-                            s, ws,
-                            out_features):
+
+def TernaInfer_linear(  input, 
+                        compressed_val, TileOffsets_global,TileOffsets_median, bitmap,
+                        workspace,
+                        s, ws, ws_num,
+                        out_features):
     out_shape = list(input.shape)
     out_shape[-1] = out_features
 
@@ -47,7 +50,6 @@ def TernaInfer_linear(input,
         input_padded = input.reshape(M, K)
 
     ret_padded = torch.empty((M_padded,N), dtype=torch.bfloat16, device=input.device)
-    Reduction_Workspace = torch.empty(M_padded*N * SPLIT_K, dtype=torch.int32, device=input.device)
 
     TernaSpMM_lib.bitlinear_TernaSpMM(
         ctypes.c_void_p(input_padded.data_ptr()),
@@ -59,10 +61,10 @@ def TernaInfer_linear(input,
         ctypes.c_void_p(s.data_ptr()),
         ctypes.c_void_p(ws.data_ptr()),
         ctypes.c_int(M_padded), ctypes.c_int(N), ctypes.c_int(K),
-        ctypes.c_int(SPLIT_K),ctypes.c_void_p(Reduction_Workspace.data_ptr()),
+        ctypes.c_int(SPLIT_K),ctypes.c_void_p(workspace.data_ptr()),
         ctypes.c_void_p(stream.cuda_stream)
     )
-
+    
     ret=ret_padded[:M,:].reshape(*out_shape)
     return ret
 
@@ -77,6 +79,7 @@ class ModelArgs:
     norm_eps: float = 1e-5
     rope_theta: float = 500000.0
     use_kernel: bool = False
+    max_matrix_elements= 13824 * 2560
 
 
 LayerCache = Tuple[torch.Tensor, torch.Tensor]
@@ -99,7 +102,14 @@ class SpBitLinear(nn.Module):
         self.weight_TileOffsets_global = torch.nn.Parameter(dic[key+".weight_TileOffsets_global"], requires_grad=False)
         self.weight_TileOffsets_median = torch.nn.Parameter(dic[key+".weight_TileOffsets_median"], requires_grad=False)
         self.weight_bitmap = torch.nn.Parameter(dic[key+".weight_bitmap"], requires_grad=False)
-        self.weight_scale = torch.nn.Parameter(dic[key+".weight_scale"], requires_grad=False)
+        ws = dic[key+".weight_scale"]
+        self.weight_scale = torch.nn.Parameter(ws[ws != 0].clone(), requires_grad=False)
+        self.ws_num = len(self.weight_scale)
+        self.register_buffer(
+            'workspace', 
+            torch.empty(ModelArgs().max_matrix_elements, dtype=torch.int8), 
+            persistent=False
+        )
 
     @torch.compile
     def quant_input(self, input):
@@ -110,7 +120,8 @@ class SpBitLinear(nn.Module):
         input, s = self.quant_input(input)
         return TernaInfer_linear( input, 
                                         self.weight_compressed_val,self.weight_TileOffsets_global,self.weight_TileOffsets_median,self.weight_bitmap,
-                                        s, self.weight_scale,
+                                        self.workspace,
+                                        s, self.weight_scale, self.ws_num,
                                         self.out_features)
 
 class BF16BitLinear(nn.Module):

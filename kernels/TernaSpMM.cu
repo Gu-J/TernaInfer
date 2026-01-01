@@ -31,7 +31,82 @@ extern "C" void bitlinear_TernaSpMM(int8_t* input0,
     int K_Global                    = K;
     int N_Global                    = M;
 
-    mySpMM_SplitK_API_bitmap_v3(stream,
+    if(M<=64)
+        mySpMM_SplitK_API_bitmap_v3(stream,
+                        myCompressed_Val_gpu_v3, 
+                        mybitmap_TileOffsets_global_gpu_v3, 
+                        mybitmap_TileOffsets_median_gpu_v3, 
+                        mybitmap_gpu_v3, 
+                        input0,
+                        output0,
+                        M_Global,
+                        N_Global,
+                        K_Global,
+                        myReduction_Workspace_bitmapv3,
+                        SPLIT_K,
+                        s,
+                        ws
+                        );
+    else
+        mySpMM_SplitK_API_bitmap_v3_prefill(stream,
+                myCompressed_Val_gpu_v3, 
+                mybitmap_TileOffsets_global_gpu_v3, 
+                mybitmap_TileOffsets_median_gpu_v3, 
+                mybitmap_gpu_v3, 
+                input0,
+                output0,
+                M_Global,
+                N_Global,
+                K_Global,
+                myReduction_Workspace_bitmapv3,
+                SPLIT_K,
+                s,
+                ws
+                );     
+    checkLastCudaError(__LINE__);
+
+}
+
+
+extern "C" void bitlinear_TernaSpMM_prefill(int8_t* input0, 
+                                    uint32_t* myCompressed_Val_gpu_v3, int* mybitmap_TileOffsets_global_gpu_v3,uint16_t*mybitmap_TileOffsets_median_gpu_v3,uint64_t*mybitmap_gpu_v3,
+                                    __nv_bfloat16* output0, 
+                                    __nv_bfloat16* s, __nv_bfloat16* ws, int M, int N, int K, int SPLIT_K,int32_t* myReduction_Workspace_bitmapv3,cudaStream_t stream){
+
+    int M_Global                    = N;
+    int K_Global                    = K;
+    int N_Global                    = M;
+
+    mySpMM_SplitK_API_bitmap_v3_prefill(stream,
+                    myCompressed_Val_gpu_v3, 
+                    mybitmap_TileOffsets_global_gpu_v3, 
+                    mybitmap_TileOffsets_median_gpu_v3, 
+                    mybitmap_gpu_v3, 
+                    input0,
+                    output0,
+                    M_Global,
+                    N_Global,
+                    K_Global,
+                    myReduction_Workspace_bitmapv3,
+                    SPLIT_K,
+                    s,
+                    ws
+                    );
+    checkLastCudaError(__LINE__);
+
+}
+
+
+extern "C" void bitlinear_TernaSpMM_scale(int8_t* input0, 
+                                    uint32_t* myCompressed_Val_gpu_v3, int* mybitmap_TileOffsets_global_gpu_v3,uint16_t*mybitmap_TileOffsets_median_gpu_v3,uint64_t*mybitmap_gpu_v3,
+                                    __nv_bfloat16* output0, 
+                                    __nv_bfloat16* s, __nv_bfloat16* ws, int M, int N, int K, int SPLIT_K,int32_t* myReduction_Workspace_bitmapv3,cudaStream_t stream){
+
+    int M_Global                    = N;
+    int K_Global                    = K;
+    int N_Global                    = M;
+
+    mySpMM_SplitK_API_bitmap_v3_scale(stream,
                     myCompressed_Val_gpu_v3, 
                     mybitmap_TileOffsets_global_gpu_v3, 
                     mybitmap_TileOffsets_median_gpu_v3, 
@@ -53,8 +128,93 @@ extern "C" void bitlinear_TernaSpMM(int8_t* input0,
 
 
 
-
 //////////////////////////////// helper functions ////////////////////////////////
+
+
+
+
+extern "C" void bitlinear_TernaSpMM_benchmark(int8_t* input0, 
+                                              uint32_t* myCompressed_Val_gpu_v3, 
+                                              int* mybitmap_TileOffsets_global_gpu_v3,
+                                              uint16_t* mybitmap_TileOffsets_median_gpu_v3,
+                                              uint64_t* mybitmap_gpu_v3,
+                                              __nv_bfloat16* output0, 
+                                              __nv_bfloat16* s, 
+                                              __nv_bfloat16* ws, 
+                                              int M, int N, int K, 
+                                              int SPLIT_K,
+                                              int32_t* myReduction_Workspace_bitmapv3,
+                                              cudaStream_t stream){
+    
+    const int warmup_iters = 10;
+    const int bench_iters = 500;
+    int M_Global = N;
+    int K_Global = K;
+    int N_Global = M;
+
+    // Warmup
+    for (int i = 0; i < warmup_iters; ++i) {
+        mySpMM_SplitK_API_bitmap_v3(stream,
+                        myCompressed_Val_gpu_v3, 
+                        mybitmap_TileOffsets_global_gpu_v3, 
+                        mybitmap_TileOffsets_median_gpu_v3, 
+                        mybitmap_gpu_v3, 
+                        input0,
+                        output0,
+                        M_Global,
+                        N_Global,
+                        K_Global,
+                        myReduction_Workspace_bitmapv3,
+                        SPLIT_K,
+                        s,
+                        ws
+                        );
+    }
+    cudaStreamSynchronize(stream);
+    checkLastCudaError(__LINE__);
+
+    // Create CUDA events for timing
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+
+    // Benchmark
+    cudaEventRecord(start, stream);
+    for (int i = 0; i < bench_iters; ++i) {
+        mySpMM_SplitK_API_bitmap_v3(stream,
+                        myCompressed_Val_gpu_v3, 
+                        mybitmap_TileOffsets_global_gpu_v3, 
+                        mybitmap_TileOffsets_median_gpu_v3, 
+                        mybitmap_gpu_v3, 
+                        input0,
+                        output0,
+                        M_Global,
+                        N_Global,
+                        K_Global,
+                        myReduction_Workspace_bitmapv3,
+                        SPLIT_K,
+                        s,
+                        ws
+                        );
+    }
+    cudaEventRecord(stop, stream);
+    cudaEventSynchronize(stop);
+    checkLastCudaError(__LINE__);
+
+    // Calculate and print timing
+    float total_ms = 0;
+    cudaEventElapsedTime(&total_ms, start, stop);
+    float avg_time_ms = total_ms / bench_iters;
+    float avg_time_us = avg_time_ms * 1000.0f;
+
+    printf("Shape(M=%d, N=%d, K=%d): %.2f us (avg over %d iters, warmup=%d)\n", 
+           M, N, K, avg_time_us, bench_iters, warmup_iters);
+
+    // Cleanup
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);
+}
+
 
 
 

@@ -2,6 +2,8 @@
 nvcc -std=c++17 -Xcudafe --diag_suppress=177 --compiler-options -fPIC -lineinfo --threads 0 \
     --shared TernaSpMM.cu \
     -lcuda -lcublas \
+    -Icutlass/include   -Icutlass/tools/util/include \
+    -w \
     -gencode arch=compute_86,code=sm_86 \
     -o libternaspmm.so
 
