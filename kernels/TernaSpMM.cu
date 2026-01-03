@@ -25,7 +25,7 @@ extern "C" void checkLastCudaError(int line)
 extern "C" void bitlinear_TernaSpMM(int8_t* input0, 
                                     uint32_t* myCompressed_Val_gpu_v3, int* mybitmap_TileOffsets_global_gpu_v3,uint16_t*mybitmap_TileOffsets_median_gpu_v3,uint64_t*mybitmap_gpu_v3,
                                     __nv_bfloat16* output0, 
-                                    __nv_bfloat16* s, __nv_bfloat16* ws, int M, int N, int K, int SPLIT_K,int32_t* myReduction_Workspace_bitmapv3,cudaStream_t stream){
+                                    __nv_bfloat16* s, __nv_bfloat16* ws, int ws_num, int M, int N, int K, int SPLIT_K,int32_t* myReduction_Workspace_bitmapv3,cudaStream_t stream){
 
     int M_Global                    = N;
     int K_Global                    = K;
@@ -45,7 +45,8 @@ extern "C" void bitlinear_TernaSpMM(int8_t* input0,
                         myReduction_Workspace_bitmapv3,
                         SPLIT_K,
                         s,
-                        ws
+                        ws,
+                        ws_num
                         );
     else
         mySpMM_SplitK_API_bitmap_v3_prefill(stream,
@@ -61,69 +62,13 @@ extern "C" void bitlinear_TernaSpMM(int8_t* input0,
                 myReduction_Workspace_bitmapv3,
                 SPLIT_K,
                 s,
-                ws
+                ws,
+                ws_num
                 );     
     checkLastCudaError(__LINE__);
 
 }
 
-
-extern "C" void bitlinear_TernaSpMM_prefill(int8_t* input0, 
-                                    uint32_t* myCompressed_Val_gpu_v3, int* mybitmap_TileOffsets_global_gpu_v3,uint16_t*mybitmap_TileOffsets_median_gpu_v3,uint64_t*mybitmap_gpu_v3,
-                                    __nv_bfloat16* output0, 
-                                    __nv_bfloat16* s, __nv_bfloat16* ws, int M, int N, int K, int SPLIT_K,int32_t* myReduction_Workspace_bitmapv3,cudaStream_t stream){
-
-    int M_Global                    = N;
-    int K_Global                    = K;
-    int N_Global                    = M;
-
-    mySpMM_SplitK_API_bitmap_v3_prefill(stream,
-                    myCompressed_Val_gpu_v3, 
-                    mybitmap_TileOffsets_global_gpu_v3, 
-                    mybitmap_TileOffsets_median_gpu_v3, 
-                    mybitmap_gpu_v3, 
-                    input0,
-                    output0,
-                    M_Global,
-                    N_Global,
-                    K_Global,
-                    myReduction_Workspace_bitmapv3,
-                    SPLIT_K,
-                    s,
-                    ws
-                    );
-    checkLastCudaError(__LINE__);
-
-}
-
-
-extern "C" void bitlinear_TernaSpMM_scale(int8_t* input0, 
-                                    uint32_t* myCompressed_Val_gpu_v3, int* mybitmap_TileOffsets_global_gpu_v3,uint16_t*mybitmap_TileOffsets_median_gpu_v3,uint64_t*mybitmap_gpu_v3,
-                                    __nv_bfloat16* output0, 
-                                    __nv_bfloat16* s, __nv_bfloat16* ws, int M, int N, int K, int SPLIT_K,int32_t* myReduction_Workspace_bitmapv3,cudaStream_t stream){
-
-    int M_Global                    = N;
-    int K_Global                    = K;
-    int N_Global                    = M;
-
-    mySpMM_SplitK_API_bitmap_v3_scale(stream,
-                    myCompressed_Val_gpu_v3, 
-                    mybitmap_TileOffsets_global_gpu_v3, 
-                    mybitmap_TileOffsets_median_gpu_v3, 
-                    mybitmap_gpu_v3, 
-                    input0,
-                    output0,
-                    M_Global,
-                    N_Global,
-                    K_Global,
-                    myReduction_Workspace_bitmapv3,
-                    SPLIT_K,
-                    s,
-                    ws
-                    );
-    checkLastCudaError(__LINE__);
-
-}
 
 
 
@@ -141,6 +86,7 @@ extern "C" void bitlinear_TernaSpMM_benchmark(int8_t* input0,
                                               __nv_bfloat16* output0, 
                                               __nv_bfloat16* s, 
                                               __nv_bfloat16* ws, 
+                                              int ws_num,
                                               int M, int N, int K, 
                                               int SPLIT_K,
                                               int32_t* myReduction_Workspace_bitmapv3,
@@ -167,7 +113,8 @@ extern "C" void bitlinear_TernaSpMM_benchmark(int8_t* input0,
                         myReduction_Workspace_bitmapv3,
                         SPLIT_K,
                         s,
-                        ws
+                        ws,
+                        ws_num
                         );
     }
     cudaStreamSynchronize(stream);
@@ -194,7 +141,8 @@ extern "C" void bitlinear_TernaSpMM_benchmark(int8_t* input0,
                         myReduction_Workspace_bitmapv3,
                         SPLIT_K,
                         s,
-                        ws
+                        ws,
+                        ws_num
                         );
     }
     cudaEventRecord(stop, stream);

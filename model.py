@@ -79,6 +79,7 @@ def TernaInfer_linear(  input,
         ctypes.c_void_p(ret_padded.data_ptr()),
         ctypes.c_void_p(s.data_ptr()),
         ctypes.c_void_p(ws.data_ptr()),
+        ctypes.c_int(ws_num),
         ctypes.c_int(M_padded), ctypes.c_int(N), ctypes.c_int(K),
         ctypes.c_int(SPLIT_K),ctypes.c_void_p(workspace.data_ptr()),
         ctypes.c_void_p(stream.cuda_stream)

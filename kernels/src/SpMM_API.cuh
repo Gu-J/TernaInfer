@@ -66,7 +66,8 @@ cudaError_t mySpMM_SplitK_API_bitmap_v3(cudaStream_t stream,
                             int32_t*        Reduction_Workspace,  
                             int          Split_K,
                             __nv_bfloat16*  s,
-                            __nv_bfloat16*  ws)
+                            __nv_bfloat16*  ws,
+                            int ws_num)
 {
     // Batched SpMM
     switch (N_Global) {
@@ -104,7 +105,7 @@ cudaError_t mySpMM_SplitK_API_bitmap_v3(cudaStream_t stream,
                                                                                      K_Global,
                                                                                      Split_K);
             else {
-                printf("MM_Sparse_API Error: Unsupported N dimension %d!\n", N_Global);
+                printf("MM_Sparse_API Error: Unsupported N dimension %d! N needs to be padded to a multiple of 8!\n", N_Global);
                 return cudaErrorUnknown;
             }
             break;
@@ -114,12 +115,6 @@ cudaError_t mySpMM_SplitK_API_bitmap_v3(cudaStream_t stream,
     cudaError_t Error = cudaGetLastError();
     if (Error != cudaSuccess)
         return Error;
-
-    int ws_num=1;         // referring to Bitnet-b1.58-2B-4T
-    if(M_Global==3840 && K_Global==2560)ws_num=3;
-    else if(M_Global==2560 && K_Global==2560)ws_num=1;
-    else if(M_Global==13824 && K_Global==2560)ws_num=2;
-    else if(M_Global==2560 && K_Global==6912)ws_num=1;
 
     dim3 GridDim((M_Global * N_Global) / 256, 1, 1);
     dim3 BlockDim(WARP_SIZE, 1, 1);
@@ -259,7 +254,8 @@ cudaError_t mySpMM_SplitK_API_bitmap_v3_prefill(
                             int32_t*        Reduction_Workspace,  
                             int          Split_K,
                             __nv_bfloat16*  s,
-                            __nv_bfloat16*  ws)
+                            __nv_bfloat16*  ws,
+                            int ws_num)
 {
     mySpMM_SplitK_Kernel_Ex_bitmap_v3_prefill<TilingConfigBitmapV3<4, 1, 1>>(
         stream, Compressed_A, TileOffsets, TileOffsets_Median, bitmap,  B, Reduction_Workspace, M_Global, N_Global, K_Global, Split_K);
@@ -267,13 +263,6 @@ cudaError_t mySpMM_SplitK_API_bitmap_v3_prefill(
     cutlass_int8_gemm(stream, B, (int8_t*)Reduction_Workspace, C, N_Global, M_Global, K_Global);
     
     // return cudaGetLastError();
-    
-    
-    int ws_num=1;         // referring to Bitnet-b1.58-2B-4T
-    if(M_Global==3840 && K_Global==2560)ws_num=3;
-    else if(M_Global==2560 && K_Global==2560)ws_num=1;
-    else if(M_Global==13824 && K_Global==2560)ws_num=2;
-    else if(M_Global==2560 && K_Global==6912)ws_num=1;
 
     int total = M_Global * N_Global;
     int threads = 256;
@@ -291,45 +280,3 @@ cudaError_t mySpMM_SplitK_API_bitmap_v3_prefill(
     return cudaGetLastError();
 }
 
-
-
-cudaError_t mySpMM_SplitK_API_bitmap_v3_scale(cudaStream_t stream,
-                            const uint32_t*  Compressed_A,
-                            const int*   TileOffsets,
-                            const uint16_t* TileOffsets_Median,
-                            const uint64_t* bitmap,
-                            const int8_t*  B,
-                            __nv_bfloat16*        C,
-                            const int    M_Global,
-                            const int    N_Global,
-                            const int    K_Global,
-                            int32_t*        Reduction_Workspace,  
-                            int          Split_K,
-                            __nv_bfloat16*  s,
-                            __nv_bfloat16*  ws)
-{
-    int ws_num=1;         // referring to Bitnet-b1.58-2B-4T
-    if(M_Global==3840 && K_Global==2560)ws_num=3;
-    else if(M_Global==2560 && K_Global==2560)ws_num=1;
-    else if(M_Global==13824 && K_Global==2560)ws_num=2;
-    else if(M_Global==2560 && K_Global==6912)ws_num=1;
-
-    // dim3 GridDim((M_Global * N_Global) / 256, 1, 1);
-    // dim3 BlockDim(WARP_SIZE, 1, 1);
-
-    // scale_kernel<<<GridDim, BlockDim, 0, stream>>>(C, Reduction_Workspace,M_Global, N_Global,Split_K,s,ws,ws_num);
-
-    int total = M_Global * N_Global;
-    int threads = 256;
-    int blocks = (total + threads - 1) / threads;
-
-    scale_kernel<<<blocks, threads, 0, stream>>>(
-        C,
-        N_Global,
-        M_Global,
-        s,
-        ws,
-        ws_num
-    );
-    return cudaGetLastError();
-}

@@ -360,7 +360,7 @@ def main(ckpt_dir: str, interactive: bool = False, chat_format: bool = False, BF
             g.tokenizer.eot_id = g.tokenizer.eos_id
             tokens = [g.tokenizer.encode(x, bos=False, eos=False) for x in prompts]
 
-        print(len(tokens[0]))
+        # print(len(tokens[0]))
         stats, out_tokens = g.generate_all(
             tokens, use_cuda_graphs="NO_CUDA_GRAPHS" not in os.environ, use_sampling=sampling,
         )

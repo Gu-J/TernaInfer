@@ -55,7 +55,7 @@ extern "C" void checkLastCudaError(int line);
 extern "C" void bitlinear_TernaSpMM(int8_t* input0, 
                                     uint32_t* myCompressed_Val_gpu_v3, int* mybitmap_TileOffsets_global_gpu_v3,uint16_t*mybitmap_TileOffsets_median_gpu_v3,uint64_t*mybitmap_gpu_v3,
                                     __nv_bfloat16* output0, 
-                                    __nv_bfloat16* s, __nv_bfloat16* ws, int M, int N, int K, int SPLIT_K,int32_t* myReduction_Workspace_bitmapv3,cudaStream_t stream);
+                                    __nv_bfloat16* s, __nv_bfloat16* ws, int ws_num, int M, int N, int K, int SPLIT_K,int32_t* myReduction_Workspace_bitmapv3,cudaStream_t stream);
 
 extern "C" int myInitSparseMatrix_bitmap(
     __nv_bfloat16* A_h,
@@ -368,6 +368,7 @@ int main(int argc, char** argv)
                         myX_SpMM_bitmapv3,
                         s,
                         ws,
+                        4,
                         M,
                         N,
                         K,
@@ -386,6 +387,7 @@ int main(int argc, char** argv)
                         myX_SpMM_bitmapv3,
                         s,
                         ws,
+                        4,
                         M,
                         N,
                         K,
