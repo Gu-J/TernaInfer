@@ -365,7 +365,6 @@ class Transformer(nn.Module):
         torch.cuda.empty_cache()
 
 
-
     @torch.no_grad()
     def forward_with_attn_bias(
         self,

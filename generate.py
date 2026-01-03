@@ -95,7 +95,6 @@ class FastGen:
         print(f"compiled model in {time.time() - start_time:.2f} seconds")
 
     def compile_prefill(self):
-
         if self._cache is None:
             self._cache = fast.make_cache(
                 args=self.model_args,
@@ -165,7 +164,6 @@ class FastGen:
         return replay
 
     def compile_generate(self):
-
         if self._cache is None:
             self._cache = fast.make_cache(
                 args=self.model_args,
