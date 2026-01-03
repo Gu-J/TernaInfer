@@ -5,19 +5,38 @@
 
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
-
 import torch
+import gc
 from torch import nn
 from torch.nn import functional as F
-
+import ctypes
 from xformers.ops import RMSNorm, fmha, rope_padded
 from xformers.ops.fmha.attn_bias import (
     BlockDiagonalCausalWithOffsetPaddedKeysMask as AttnBias,
 )
 
-import ctypes
-
 TernaSpMM_lib = ctypes.CDLL('./kernels/libternaspmm.so')
+
+@dataclass
+class ModelArgs:
+    dim: int = 2560
+    n_layers: int = 30
+    n_heads: int = 20
+    n_kv_heads: int = 5
+    vocab_size: int = 128256
+    ffn_dim: int = 6912
+    norm_eps: float = 1e-5
+    rope_theta: float = 500000.0
+    use_kernel: bool = False
+    max_matrix_elements= 13824 * 2560
+
+
+_GLOBAL_WORKSPACE = None
+def get_global_workspace(device='cuda'):
+    global _GLOBAL_WORKSPACE
+    if _GLOBAL_WORKSPACE is None:
+        _GLOBAL_WORKSPACE = torch.empty(ModelArgs().max_matrix_elements, dtype=torch.int8, device=device)
+    return _GLOBAL_WORKSPACE
 
 
 def TernaInfer_linear(  input, 
@@ -68,20 +87,6 @@ def TernaInfer_linear(  input,
     ret=ret_padded[:M,:].reshape(*out_shape)
     return ret
 
-@dataclass
-class ModelArgs:
-    dim: int = 2560
-    n_layers: int = 30
-    n_heads: int = 20
-    n_kv_heads: int = 5
-    vocab_size: int = 128256
-    ffn_dim: int = 6912
-    norm_eps: float = 1e-5
-    rope_theta: float = 500000.0
-    use_kernel: bool = False
-    max_matrix_elements= 13824 * 2560
-
-
 LayerCache = Tuple[torch.Tensor, torch.Tensor]
 
 class SpBitLinear(nn.Module):
@@ -98,18 +103,13 @@ class SpBitLinear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
 
-        self.weight_compressed_val = torch.nn.Parameter(dic[key+".weight_compressed_val"], requires_grad=False)
-        self.weight_TileOffsets_global = torch.nn.Parameter(dic[key+".weight_TileOffsets_global"], requires_grad=False)
-        self.weight_TileOffsets_median = torch.nn.Parameter(dic[key+".weight_TileOffsets_median"], requires_grad=False)
-        self.weight_bitmap = torch.nn.Parameter(dic[key+".weight_bitmap"], requires_grad=False)
+        self.weight_compressed_val = torch.nn.Parameter(dic[key+".weight_compressed_val"].cuda(), requires_grad=False)
+        self.weight_TileOffsets_global = torch.nn.Parameter(dic[key+".weight_TileOffsets_global"].cuda(), requires_grad=False)
+        self.weight_TileOffsets_median = torch.nn.Parameter(dic[key+".weight_TileOffsets_median"].cuda(), requires_grad=False)
+        self.weight_bitmap = torch.nn.Parameter(dic[key+".weight_bitmap"].cuda(), requires_grad=False)
         ws = dic[key+".weight_scale"]
-        self.weight_scale = torch.nn.Parameter(ws[ws != 0].clone(), requires_grad=False)
+        self.weight_scale = torch.nn.Parameter(ws[ws != 0].clone().cuda(), requires_grad=False)
         self.ws_num = len(self.weight_scale)
-        self.register_buffer(
-            'workspace', 
-            torch.empty(ModelArgs().max_matrix_elements, dtype=torch.int8), 
-            persistent=False
-        )
 
     @torch.compile
     def quant_input(self, input):
@@ -118,11 +118,13 @@ class SpBitLinear(nn.Module):
 
     def forward(self, input):
         input, s = self.quant_input(input)
-        return TernaInfer_linear( input, 
-                                        self.weight_compressed_val,self.weight_TileOffsets_global,self.weight_TileOffsets_median,self.weight_bitmap,
-                                        self.workspace,
-                                        s, self.weight_scale, self.ws_num,
-                                        self.out_features)
+        return TernaInfer_linear( 
+            input, 
+            self.weight_compressed_val,self.weight_TileOffsets_global,self.weight_TileOffsets_median,self.weight_bitmap,
+            get_global_workspace(),
+            s, self.weight_scale, self.ws_num,
+            self.out_features
+        )
 
 class BF16BitLinear(nn.Module):
     in_features: int
@@ -133,7 +135,7 @@ class BF16BitLinear(nn.Module):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = torch.nn.Parameter(dic[key+".weight"], requires_grad=False)
+        self.weight = torch.nn.Parameter(dic[key+".weight"].cuda(), requires_grad=False)
 
     @torch.compile
     def quant_input(self, input):
@@ -183,7 +185,8 @@ class Attention(nn.Module):
         )
 
         self.attn_sub_norm = RMSNorm(dim, norm_eps)
-        self.attn_sub_norm.weight.data = dic[layer_prefix+".attn_sub_norm.weight"]
+        with torch.no_grad():
+            self.attn_sub_norm.weight.copy_(dic[layer_prefix+".attn_sub_norm.weight"])
 
 
     def forward(
@@ -262,7 +265,8 @@ class FeedForward(nn.Module):
             bias=False,
         )
         self.ffn_sub_norm = RMSNorm(hidden_dim, norm_eps)
-        self.ffn_sub_norm.weight.data = dic[layer_prefix+".ffn_sub_norm.weight"]
+        with torch.no_grad():
+            self.ffn_sub_norm.weight.copy_(dic[layer_prefix+".ffn_sub_norm.weight"])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x13 = self.w13(x)
@@ -305,9 +309,10 @@ class TransformerBlock(nn.Module):
             layer_prefix=layer_prefix+".feed_forward"
         )
         self.attention_norm = RMSNorm(args.dim, eps=args.norm_eps)
-        self.attention_norm.weight.data = dic[layer_prefix+".attention_norm.weight"]
         self.ffn_norm = RMSNorm(args.dim, eps=args.norm_eps)
-        self.ffn_norm.weight.data = dic[layer_prefix+".ffn_norm.weight"]
+        with torch.no_grad():
+            self.attention_norm.weight.copy_(dic[layer_prefix+".attention_norm.weight"])
+            self.ffn_norm.weight.copy_(dic[layer_prefix+".ffn_norm.weight"])
 
     def forward(
         self,
@@ -329,27 +334,36 @@ class Transformer(nn.Module):
         super().__init__()
         assert args.vocab_size > 0
 
-        embedding_weight=dic["tok_embeddings.weight"]
-
         self.tok_embeddings = nn.Embedding(
             num_embeddings=args.vocab_size,
             embedding_dim=args.dim,
         )
-        self.tok_embeddings.weight.data=embedding_weight
 
         self.layers = nn.ModuleList()
         for i in range(args.n_layers):
             self.layers.append(TransformerBlock(args,dic,"layers."+str(i)))
 
         self.norm = RMSNorm(args.dim, eps=args.norm_eps)
-        self.norm.weight.data = dic["norm.weight"]
+        with torch.no_grad():
+            self.norm.weight.copy_(dic["norm.weight"])
 
-        self.output = nn.Linear(
+        from torch.nn.utils import skip_init
+        self.output = skip_init(
+            nn.Linear,
             args.dim,
             args.vocab_size,
             bias=False,
         )
-        self.output.weight.data=embedding_weight
+
+        with torch.no_grad():
+            self.tok_embeddings.weight.copy_(dic["tok_embeddings.weight"])
+        
+        self.output.weight=self.tok_embeddings.weight
+
+        gc.collect()
+        torch.cuda.empty_cache()
+
+
 
     @torch.no_grad()
     def forward_with_attn_bias(

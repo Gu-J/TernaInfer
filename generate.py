@@ -60,11 +60,11 @@ class FastGen:
 
         if BF16:
             model_args = fast.ModelArgs(use_kernel=False)
-            checkpoint = torch.load(str(Path(ckpt_dir) / "model_bf16.pt"), map_location=device)
+            checkpoint = torch.load(str(Path(ckpt_dir) / "model_bf16.pt"), map_location="cpu")
         else:
             model_args = fast.ModelArgs(use_kernel=True)
-            ternary_weights = torch.load(str(Path(ckpt_dir) / "model_TernaInfer_TernaryWeights.pt"), map_location=device)
-            non_ternary = torch.load(str(Path(ckpt_dir) / "model_embeddings_and_norms_non_ternary.pt"), map_location=device)
+            ternary_weights = torch.load(str(Path(ckpt_dir) / "model_TernaInfer_TernaryWeights.pt"), map_location="cpu")
+            non_ternary = torch.load(str(Path(ckpt_dir) / "model_embeddings_and_norms_non_ternary.pt"), map_location="cpu")
             checkpoint = ternary_weights | non_ternary
 
         model = fast.Transformer(model_args,checkpoint)
@@ -100,6 +100,7 @@ class FastGen:
             self._cache = fast.make_cache(
                 args=self.model_args,
                 length=self.gen_args.gen_bsz * self.max_seq_length,
+                device="cuda"
             )
 
         seq_lens = [self.gen_args.prompt_length for _ in range(self.gen_args.gen_bsz)]
@@ -169,6 +170,7 @@ class FastGen:
             self._cache = fast.make_cache(
                 args=self.model_args,
                 length=self.gen_args.gen_bsz * self.max_seq_length,
+                device="cuda"
             )
 
         seq_lens = [1 for _ in range(self.gen_args.gen_bsz)]
@@ -268,6 +270,7 @@ class FastGen:
         out_tokens[0, :] = next_token
 
         torch.cuda.synchronize()
+        stats.end_phase(tokens= self.gen_args.prompt_length * bs)
         stats.phase("decode" if use_cuda_graphs else "total")
 
         eos_id = self.tokenizer.eot_id
@@ -370,6 +373,7 @@ def main(ckpt_dir: str, interactive: bool = False, chat_format: bool = False, BF
 
         for phase_stats in stats.phases:
             print(phase_stats.show())
+        print()
 
 if __name__ == "__main__":
     fire.Fire(main)

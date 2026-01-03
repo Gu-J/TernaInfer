@@ -13,7 +13,7 @@
  ***************************************************************************/
  
 
-// Performs: X = x @ WT, where x is [M,K], WT is [N,K] and X is [M,N]
+// Performs: O = x @ WT, where x is [M,K], W is [N,K] and O is [M,N]
 // Correct input format: ./spmm_test M N K Sparsity SplitK
 
 // nvcc test_kernel.cu -L. -lternaspmm -lcublas -o test_kernel -arch=sm_86
@@ -110,12 +110,12 @@ int main(int argc, char** argv)
 {
     if (argc != 6) {
         printf("Correct input format: ./spmm_test M N K Sparsity SplitK\n");
-        printf("Performs: X = x @ WT, where x is [M,K], WT is [N,K] and X is [M,N]\n");
+        printf("Performs: O = x @ WT, where x is [M,K], W is [N,K] and O is [M,N]\n");
         return 0;
     }
     int M                    = atoi(argv[1]);
-    int N                    = atoi(argv[3]);
-    int K                    = atoi(argv[2]);
+    int N                    = atoi(argv[2]);
+    int K                    = atoi(argv[3]);
     int WEIGHT_SPARSITY             = atoi(argv[4]);
     int SPLIT_K                     = atoi(argv[5]);
     cublasStatus_t cublas_status;

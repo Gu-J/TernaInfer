@@ -18,9 +18,9 @@ class PhaseStats:
         tps = self.tokens / self.time
         return (
             f"[{self.name}] "
-            f"generated tokens: {self.tokens}"
-            f" - total time: {self.time:.3f}s"
-            f" - {tps:.1f} tokens per second"
+            f"\ttokens: {self.tokens}"
+            f"\t total time: {self.time:.3f}s"
+            f"\t {tps:.1f} tokens per second"
         )
 
 
@@ -39,13 +39,14 @@ class Stats:
             return
         if now is None:
             now = time.time()
-        cname, ctokens, ctime = self.current
+        cname, ctime = self.current
         stats = PhaseStats(
             name=cname,
-            tokens=tokens - ctokens,
+            tokens=tokens,
             time=now - ctime,
         )
         self.phases.append(stats)
+        self.current=None
 
     def phase(self, name: str, tokens: int = 0):
         """
@@ -53,5 +54,5 @@ class Stats:
         if one is ongoing.
         """
         now = time.time()
-        self.end_phase(tokens, now)
-        self.current = (name, tokens, now)
+        # self.end_phase(0, now)
+        self.current = (name, now)
