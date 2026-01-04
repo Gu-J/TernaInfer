@@ -42,10 +42,12 @@ python ./generate.py ./checkpoints/ --interactive --chat_format --BF16
 
 ```
 
-## References
+## Acknowledgements
 
-Our implementation is inspired by and references the following projects:
+This project includes code modified from the following projects:
 
 - https://github.com/microsoft/BitNet/tree/main/gpu  
 - https://github.com/HPMLL/SpInfer_EuroSys25
 - https://github.com/NVIDIA/cutlass
+
+We thank the authors for their excellent work.
