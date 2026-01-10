@@ -19,6 +19,7 @@ from xformers.ops.fmha.attn_bias import (
 )
 
 TernaSpMM_lib = ctypes.CDLL('./kernels/libternaspmm.so')
+# Prefill optimizations will be added soon.
 
 @dataclass
 class ModelArgs:

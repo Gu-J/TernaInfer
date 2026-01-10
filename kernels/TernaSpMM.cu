@@ -100,22 +100,19 @@ extern "C" void bitlinear_TernaSpMM_benchmark(int8_t* input0,
 
     // Warmup
     for (int i = 0; i < warmup_iters; ++i) {
-        mySpMM_SplitK_API_bitmap_v3(stream,
-                        myCompressed_Val_gpu_v3, 
-                        mybitmap_TileOffsets_global_gpu_v3, 
-                        mybitmap_TileOffsets_median_gpu_v3, 
-                        mybitmap_gpu_v3, 
-                        input0,
-                        output0,
-                        M_Global,
-                        N_Global,
-                        K_Global,
-                        myReduction_Workspace_bitmapv3,
-                        SPLIT_K,
-                        s,
-                        ws,
-                        ws_num
-                        );
+        bitlinear_TernaSpMM(input0, 
+                            myCompressed_Val_gpu_v3, 
+                            mybitmap_TileOffsets_global_gpu_v3,
+                            mybitmap_TileOffsets_median_gpu_v3,
+                            mybitmap_gpu_v3,
+                            output0, 
+                            s, 
+                            ws, 
+                            ws_num,
+                            M, N, K, 
+                            SPLIT_K,
+                            myReduction_Workspace_bitmapv3,
+                            stream);
     }
     cudaStreamSynchronize(stream);
     checkLastCudaError(__LINE__);
@@ -128,22 +125,19 @@ extern "C" void bitlinear_TernaSpMM_benchmark(int8_t* input0,
     // Benchmark
     cudaEventRecord(start, stream);
     for (int i = 0; i < bench_iters; ++i) {
-        mySpMM_SplitK_API_bitmap_v3(stream,
-                        myCompressed_Val_gpu_v3, 
-                        mybitmap_TileOffsets_global_gpu_v3, 
-                        mybitmap_TileOffsets_median_gpu_v3, 
-                        mybitmap_gpu_v3, 
-                        input0,
-                        output0,
-                        M_Global,
-                        N_Global,
-                        K_Global,
-                        myReduction_Workspace_bitmapv3,
-                        SPLIT_K,
-                        s,
-                        ws,
-                        ws_num
-                        );
+        bitlinear_TernaSpMM(input0, 
+                            myCompressed_Val_gpu_v3, 
+                            mybitmap_TileOffsets_global_gpu_v3,
+                            mybitmap_TileOffsets_median_gpu_v3,
+                            mybitmap_gpu_v3,
+                            output0, 
+                            s, 
+                            ws, 
+                            ws_num,
+                            M, N, K, 
+                            SPLIT_K,
+                            myReduction_Workspace_bitmapv3,
+                            stream);
     }
     cudaEventRecord(stop, stream);
     cudaEventSynchronize(stop);

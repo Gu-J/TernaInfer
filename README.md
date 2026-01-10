@@ -36,8 +36,8 @@ python ./convert/convert_TernaInfer.py --safetensors_file ./checkpoints/bitnet-b
 
 # Inference
 python ./generate.py ./checkpoints/ --interactive --chat_format
-# Prefill optimizations will be added soon.
-# Compare with standard BF16 model
+
+# To validate output consistency against the standard BF16 model, execute the following command:
 python ./generate.py ./checkpoints/ --interactive --chat_format --BF16
 
 ```
