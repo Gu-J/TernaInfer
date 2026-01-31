@@ -113,8 +113,10 @@ class SpBitLinear(nn.Module):
         self.weight_TileOffsets_median = torch.nn.Parameter(dic[key+".weight_TileOffsets_median"].cuda(), requires_grad=False)
         self.weight_bitmap = torch.nn.Parameter(dic[key+".weight_bitmap"].cuda(), requires_grad=False)
         ws = dic[key+".weight_scale"]
-        self.weight_scale = torch.nn.Parameter(ws[ws != 0].clone().cuda(), requires_grad=False)
-        self.ws_num = len(self.weight_scale)
+        self.weight_scale = torch.nn.Parameter(ws.cuda(), requires_grad=False)
+        self.ws_num = len(ws[ws != 0])
+        # self.weight_scale = torch.nn.Parameter(ws[ws != 0].clone().cuda(), requires_grad=False)
+        # self.ws_num = len(self.weight_scale)
 
     @torch.compile
     def quant_input(self, input):

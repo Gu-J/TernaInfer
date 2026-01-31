@@ -14,7 +14,6 @@
 #include <cuda.h>
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
-#include <cublas_v2.h>
 #include <cuda_runtime.h>
 #include <iostream>
 #include <vector>
@@ -23,6 +22,15 @@
 #include <cutlass/bfloat16.h>
 #include <cutlass/gemm/device/gemm.h>
 #include <cutlass/util/device_memory.h>
+#include <cutlass/epilogue/thread/linear_combination.h>
+
+#include <cutlass/gemm/device/gemm_universal.h>
+#include <cutlass/epilogue/threadblock/fusion/visitor_2x.hpp>
+#include <cutlass/epilogue/threadblock/default_epilogue_tensor_op.h>
+#include <cutlass/layout/matrix.h>
+#include <cutlass/numeric_types.h>
+#include <cutlass/arch/arch.h>
+
 
 #include "./SpMM_Kernel.cuh"
 #include "./Reduction_Kernel.cuh"
@@ -111,10 +119,12 @@ cudaError_t mySpMM_SplitK_API_bitmap_v3(cudaStream_t stream,
             break;
     }
     
-    //
     cudaError_t Error = cudaGetLastError();
     if (Error != cudaSuccess)
+    {
+        printf("Error: mySpMM_SplitK_Kernel_Ex_bitmap_v3");
         return Error;
+    }
 
     dim3 GridDim((M_Global * N_Global) / 256, 1, 1);
     dim3 BlockDim(WARP_SIZE, 1, 1);
@@ -211,6 +221,10 @@ void cutlass_int8_gemm(
 }
 
 
+
+/* Optimization Note: Current version has high overhead. Theoretical cost 
+ * is near zero when fused with CUTLASS GEMM epilogue. Disabling this 
+ * during benchmarks reveals the peak theoretical performance. */
 __global__ void scale_kernel(
     __nv_bfloat16* C,          // [M, N]
     int M,
@@ -229,6 +243,13 @@ __global__ void scale_kernel(
     int group_size = N / ws_num;
     int group = n / group_size;
     if (group >= ws_num) group = ws_num - 1;
+
+    if(N==3840 && ws_num==3)
+    {
+        if(n<2560)group=0;
+        else if(n<2560+640)group=1;
+        else group=2;
+    }
 
     float c  = __bfloat162float(C[idx]);
     float sm = __bfloat162float(s[m]);
@@ -261,6 +282,7 @@ cudaError_t mySpMM_SplitK_API_bitmap_v3_prefill(
         stream, Compressed_A, TileOffsets, TileOffsets_Median, bitmap,  B, Reduction_Workspace, M_Global, N_Global, K_Global, Split_K);
     
     cutlass_int8_gemm(stream, B, (int8_t*)Reduction_Workspace, C, N_Global, M_Global, K_Global);
+    // cutlass_int8_gemm(stream, B, (int8_t*)Reduction_Workspace, C,s, N_Global, M_Global, K_Global);
     
     // return cudaGetLastError();
 

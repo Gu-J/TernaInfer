@@ -26,16 +26,16 @@ __global__ void SplitK_Reduction(__nv_bfloat16* C, int32_t* Reduction_Workspace,
     // if(blockIdx.x==0&&threadIdx.x==0)for(int i=0;i<ws_num;i++)printf("ws[%d] = %f\n",i,__bfloat162float(ws[i]));
     int32_t* R_BasePTR_ThisBlock = Reduction_Workspace + ELEMENT_PER_THREADBLOCK * blockIdx.x;
     //
-    float Results[HALF_PER_128B];
+    int32_t Results[HALF_PER_128B];
 //
 #pragma unroll
     for (int j = 0; j < HALF_PER_128B; j++)
-        Results[j] = 0.0f;
+        Results[j] = 0;
     //
     for (int i = 0; i < Split_K; i++) {
 #pragma unroll
         for (int j = 0; j < HALF_PER_128B; j++)
-            Results[j] += static_cast<float>(R_BasePTR_ThisBlock[threadIdx.x * HALF_PER_128B + j]);
+            Results[j] += R_BasePTR_ThisBlock[threadIdx.x * HALF_PER_128B + j];
         R_BasePTR_ThisBlock += M_Global * N_Global;
     }
 
@@ -43,7 +43,16 @@ __global__ void SplitK_Reduction(__nv_bfloat16* C, int32_t* Reduction_Workspace,
     int row_ind=thread_begin_ind / M_Global;
     int col_ind=thread_begin_ind % M_Global;
     float s_el=__bfloat162float(s[row_ind]);
-    float ws_el=__bfloat162float(ws[col_ind/(M_Global/ws_num)]);
+    int ws_ind;
+    if(ws_num==3 && M_Global==3840)
+    {
+        if(col_ind<2560)ws_ind=0;
+        else if(col_ind<2560+640)ws_ind=1;
+        else ws_ind=2;
+    }
+    else 
+        ws_ind=col_ind/(M_Global/ws_num);
+    float ws_el=__bfloat162float(ws[ws_ind]);
 
 #pragma unroll
     for (int j = 0; j < HALF_PER_128B; j++)
@@ -52,6 +61,50 @@ __global__ void SplitK_Reduction(__nv_bfloat16* C, int32_t* Reduction_Workspace,
         C[ thread_begin_ind + j] = tmp;
     }
 }
+
+
+// __global__ void SplitK_Reduction(__nv_bfloat16* C, int32_t* Reduction_Workspace, int M_Global, int N_Global, int Split_K,
+//                                  __nv_bfloat16* s, __nv_bfloat16* ws, int ws_num)
+// {
+//     // if(blockIdx.x==0&&threadIdx.x==0)for(int i=0;i<ws_num;i++)printf("ws[%d] = %f\n",i,__bfloat162float(ws[i]));
+//     int32_t* R_BasePTR_ThisBlock = Reduction_Workspace + ELEMENT_PER_THREADBLOCK * blockIdx.x;
+//     //
+//     float Results[HALF_PER_128B];
+// //
+// #pragma unroll
+//     for (int j = 0; j < HALF_PER_128B; j++)
+//         Results[j] = 0.0f;
+//     //
+//     for (int i = 0; i < Split_K; i++) {
+// #pragma unroll
+//         for (int j = 0; j < HALF_PER_128B; j++)
+//             Results[j] += static_cast<float>(R_BasePTR_ThisBlock[threadIdx.x * HALF_PER_128B + j]);
+//         R_BasePTR_ThisBlock += M_Global * N_Global;
+//     }
+
+//     int thread_begin_ind=ELEMENT_PER_THREADBLOCK * blockIdx.x + threadIdx.x * HALF_PER_128B;
+//     int row_ind=thread_begin_ind / M_Global;
+//     int col_ind=thread_begin_ind % M_Global;
+//     float s_el=__bfloat162float(s[row_ind]);
+//     // float ws_el=__bfloat162float(ws[col_ind/(M_Global/ws_num)]);
+//     int ws_ind;
+//     if(ws_num==3 && M_Global==3840)
+//     {
+//         if(col_ind<2560)ws_ind=0;
+//         else if(col_ind<2560+640)ws_ind=1;
+//         else ws_ind=2;
+//     }
+//     else 
+//         ws_ind=col_ind/(M_Global/ws_num);
+//     float ws_el=__bfloat162float(ws[ws_ind]);
+
+// #pragma unroll
+//     for (int j = 0; j < HALF_PER_128B; j++)
+//     {
+//         __nv_bfloat16 tmp=__float2bfloat16_rn(Results[j]/s_el*ws_el);
+//         C[ thread_begin_ind + j] = tmp;
+//     }
+// }
 
 
 __global__ void SplitK_Reduction(__nv_bfloat16* C, int32_t* Reduction_Workspace, int M_Global, int N_Global, int Split_K)

@@ -23,6 +23,7 @@ from xformers.ops.fmha.attn_bias import (
     BlockDiagonalCausalWithOffsetPaddedKeysMask as AttnBias,
 )
 
+USE_CUDA_GRAPH=True
 
 @dataclass
 class GenArgs:
@@ -128,40 +129,41 @@ class FastGen:
             )
         torch.cuda.current_stream().wait_stream(s)
 
-        self._prefill_cuda_graph = torch.cuda.CUDAGraph()
-        recording_kwargs = {}
-        if "capture_error_mode" in torch.cuda.graph.__init__.__annotations__:
-            # In PyTorch 2.1+ and nightlies from late Aug 2023,
-            # we can do this to maybe avoid watchdog-related crashes
-            recording_kwargs["capture_error_mode"] = "thread_local"
-        with torch.cuda.graph(self._prefill_cuda_graph, **recording_kwargs):
-            self._prefill_logits = self.model.forward_with_attn_bias(
-                token_values=self._prefill_inputs[0],
-                attn_bias=self._prefill_inputs[1],
-                cache=self._cache,
-            )
+        if USE_CUDA_GRAPH:
+            self._prefill_cuda_graph = torch.cuda.CUDAGraph()
+            recording_kwargs = {}
+            if "capture_error_mode" in torch.cuda.graph.__init__.__annotations__:
+                # In PyTorch 2.1+ and nightlies from late Aug 2023,
+                # we can do this to maybe avoid watchdog-related crashes
+                recording_kwargs["capture_error_mode"] = "thread_local"
+            with torch.cuda.graph(self._prefill_cuda_graph, **recording_kwargs):
+                self._prefill_logits = self.model.forward_with_attn_bias(
+                    token_values=self._prefill_inputs[0],
+                    attn_bias=self._prefill_inputs[1],
+                    cache=self._cache,
+                )
 
-        def replay(tokens, seq_lens=None):
-            self._prefill_inputs[0].copy_(tokens)
-            if seq_lens is not None:
-                self._prefill_inputs[1].k_seqinfo.seqlen.copy_(seq_lens)
+            def replay(tokens, seq_lens=None):
+                self._prefill_inputs[0].copy_(tokens)
+                if seq_lens is not None:
+                    self._prefill_inputs[1].k_seqinfo.seqlen.copy_(seq_lens)
 
-            self._prefill_cuda_graph.replay()
-            torch.cuda.synchronize()
+                self._prefill_cuda_graph.replay()
+                torch.cuda.synchronize()
 
-            return self._prefill_logits
-        
-        # def replay(tokens, seq_lens=None):
-        #     self._prefill_inputs[0].copy_(tokens)
-        #     if seq_lens is not None:
-        #         self._prefill_inputs[1].k_seqinfo.seqlen.copy_(seq_lens)
-            
-        #     logits = self.model.forward_with_attn_bias(
-        #         token_values=self._prefill_inputs[0],
-        #         attn_bias=self._prefill_inputs[1],
-        #         cache=self._cache,
-        #     )
-        #     return logits
+                return self._prefill_logits
+        else:
+            def replay(tokens, seq_lens=None):
+                self._prefill_inputs[0].copy_(tokens)
+                if seq_lens is not None:
+                    self._prefill_inputs[1].k_seqinfo.seqlen.copy_(seq_lens)
+                
+                logits = self.model.forward_with_attn_bias(
+                    token_values=self._prefill_inputs[0],
+                    attn_bias=self._prefill_inputs[1],
+                    cache=self._cache,
+                )
+                return logits
 
         return replay
 
@@ -198,26 +200,40 @@ class FastGen:
             )
         torch.cuda.current_stream().wait_stream(s)
 
-        self._generate_cuda_graph = torch.cuda.CUDAGraph()
-        recording_kwargs = {}
-        if "capture_error_mode" in torch.cuda.graph.__init__.__annotations__:
-            # In PyTorch 2.1+ and nightlies from late Aug 2023,
-            # we can do this to maybe avoid watchdog-related crashes
-            recording_kwargs["capture_error_mode"] = "thread_local"
-        with torch.cuda.graph(self._generate_cuda_graph, **recording_kwargs):
-            self._generate_logits = self.model.forward_with_attn_bias(
-                token_values=self._generate_inputs[0],
-                attn_bias=self._generate_inputs[1],
-                cache=self._cache,
-            )
 
-        def replay(tokens, seq_lens):
-            self._generate_inputs[0].copy_(tokens)
-            self._generate_inputs[1].k_seqinfo.seqlen.copy_(seq_lens)
+        if USE_CUDA_GRAPH:
+            self._generate_cuda_graph = torch.cuda.CUDAGraph()
+            recording_kwargs = {}
+            if "capture_error_mode" in torch.cuda.graph.__init__.__annotations__:
+                # In PyTorch 2.1+ and nightlies from late Aug 2023,
+                # we can do this to maybe avoid watchdog-related crashes
+                recording_kwargs["capture_error_mode"] = "thread_local"
+            with torch.cuda.graph(self._generate_cuda_graph, **recording_kwargs):
+                self._generate_logits = self.model.forward_with_attn_bias(
+                    token_values=self._generate_inputs[0],
+                    attn_bias=self._generate_inputs[1],
+                    cache=self._cache,
+                )
 
-            self._generate_cuda_graph.replay()
+            def replay(tokens, seq_lens):
+                self._generate_inputs[0].copy_(tokens)
+                self._generate_inputs[1].k_seqinfo.seqlen.copy_(seq_lens)
 
-            return self._generate_logits
+                self._generate_cuda_graph.replay()
+
+                return self._generate_logits
+        else:
+            def replay(tokens, seq_lens=None):
+                self._generate_inputs[0].copy_(tokens)
+                if seq_lens is not None:
+                    self._generate_inputs[1].k_seqinfo.seqlen.copy_(seq_lens)
+                
+                logits = self.model.forward_with_attn_bias(
+                    token_values=self._generate_inputs[0],
+                    attn_bias=self._generate_inputs[1],
+                    cache=self._cache,
+                )
+                return logits
 
         return replay
 

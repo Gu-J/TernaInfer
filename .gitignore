@@ -11,8 +11,10 @@ git_push.sh
 
 checkpoints/
 
+data/
+
 mytest_need_delete.py
 
 kernels/cutlass/
 
-ignore*
+**/ignore_*
