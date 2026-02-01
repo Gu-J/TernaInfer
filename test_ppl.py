@@ -35,8 +35,18 @@ def evaluate_ppl(model, tokenizer, model_args, seqlen=2048):
 
     print("Loading WikiText2...")
     testdata = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
-
     text = "\n\n".join(testdata["text"])
+
+    # print("Loading Penn Treebank...")
+    # with open("data/ptb/test.txt", 'r', encoding='utf-8') as f:
+    #     lines = f.readlines()
+    # text = "\n\n".join([line.strip() for line in lines if line.strip()])  
+
+    # print("Loading LAMBADA...")
+    # with open("data/lambada/test.txt", 'r', encoding='utf-8') as f:
+    #     lines = f.readlines()
+    # text = "\n\n".join([line.strip() for line in lines if line.strip()])
+
     tokens = tokenizer.encode(text, bos=False, eos=False)
     tokens = torch.tensor(tokens, dtype=torch.int32, device=device)
 
