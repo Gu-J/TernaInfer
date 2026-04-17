@@ -19,7 +19,6 @@ from xformers.ops.fmha.attn_bias import (
 )
 
 TernaSpMM_lib = ctypes.CDLL('./kernels/libternaspmm.so')
-# Prefill optimizations will be added soon.
 
 @dataclass
 class ModelArgs:
@@ -62,7 +61,7 @@ def TernaInfer_linear(  input,
     SPLIT_K=7
 
     # --- Padding ---
-    M_padded = ((M + 7) // 8) * 8  
+    M_padded = max(8, 1 << (M - 1).bit_length())
     pad_rows = M_padded - M
     if pad_rows > 0:
         input_padded = torch.cat([
@@ -147,11 +146,11 @@ class BF16BitLinear(nn.Module):
     @torch.compile
     def quant_input(self, input):
         s = 127 / input.abs().max(dim=-1, keepdim=True).values.clamp_(min=1e-5)
-        return (input * s).round().clamp(-128, 127) / s
+        return (input * s).round().clamp(-128, 127).to(torch.int8), s
 
     def forward(self, input):
-        input = self.quant_input(input)
-        return F.linear(input, self.weight)
+        input,s = self.quant_input(input)
+        return F.linear(input.to(torch.bfloat16) , self.weight) / s 
 
 class Attention(nn.Module):
     def __init__(

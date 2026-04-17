@@ -97,8 +97,11 @@ def evaluate_ppl(model, tokenizer, model_args, seqlen=2048):
 
 if __name__ == "__main__":
     ckpt = "./checkpoints"
-
-    model, tokenizer, model_args = load_fast_model(ckpt, BF16=False)
+    model, tokenizer, model_args=load_fast_model(ckpt, BF16=False)
     ppl = evaluate_ppl(model, tokenizer, model_args)
+    print(f"TernaInfer PPL: {ppl:.4f}")
 
-    print(f"PPL: {ppl:.2f}")
+    model, tokenizer, model_args=load_fast_model(ckpt, BF16=True)
+    ppl_bf16 = evaluate_ppl(model, tokenizer, model_args)
+    print(f"BF16 PPL: {ppl:.4f}")
+

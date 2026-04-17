@@ -7,3 +7,4 @@ blobfile
 flask
 einops
 transformers
+lm-eval

@@ -8,7 +8,7 @@ Build the kernel:
 
 ```bash
 # Build libternaspmm.so
-# Note: The implementation has been tested on an NVIDIA RTX A6000 GPU (compiled with -arch=sm_86)
+# Note: Tested on NVIDIA RTX A6000 GPU (sm_86), uses CUTLASS 2.x Epilogue Visitor
 cd kernels
 git clone -b v4.3.4 --depth 1 https://github.com/NVIDIA/cutlass.git
 bash compile.sh

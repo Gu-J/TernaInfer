@@ -10,7 +10,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  ***************************************************************************/
-#include "src/SpMM_API.cuh"
+#include "src/TernaSpMM_API.cuh"
 
 extern "C" void checkLastCudaError(int line)
 {

@@ -1,0 +1,272 @@
+"""LM-eval harness wrapper for TernaInfer / BF16 models."""
+
+# Usage: python test_accuracy.py --ckpt_dir ./checkpoints --both --tasks mmlu
+
+import argparse
+import sys
+from pathlib import Path
+from typing import List, Tuple
+
+import torch
+import torch.nn.functional as F
+from tqdm import tqdm
+from xformers.ops.fmha.attn_bias import (
+    BlockDiagonalCausalWithOffsetPaddedKeysMask as AttnBias,
+)
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+# ctypes.CDLL in model.py uses a relative path, so cwd must be the project root
+import os
+os.chdir(Path(__file__).resolve().parent.parent)
+
+import model as fast
+from tokenizer import Tokenizer
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+MAX_SEQ_LEN = 4096
+
+TASKS = ["mmlu", "hellaswag", "arc_challenge"]
+
+TASK_FEWSHOT = {
+    "mmlu":          5,
+    "hellaswag":     10,
+    "arc_challenge": 25,
+}
+
+
+# ---------------------------------------------------------------------------
+# Model wrapper
+# ---------------------------------------------------------------------------
+
+class TernaInferLM:
+    def __init__(self, ckpt_dir: str, bf16: bool = False):
+        from lm_eval.api.model import LM
+        self.__class__ = type("TernaInferLM", (TernaInferLM, LM), {})
+        LM.__init__(self)
+
+        self._max_seq_len = MAX_SEQ_LEN
+
+        torch.set_default_device("cuda")
+        torch.set_default_dtype(torch.bfloat16)
+
+        ckpt = Path(ckpt_dir)
+        if bf16:
+            model_args = fast.ModelArgs(use_kernel=False)
+            checkpoint = torch.load(ckpt / "model_bf16.pt", map_location="cpu")
+        else:
+            model_args = fast.ModelArgs(use_kernel=True)
+            checkpoint = (
+                torch.load(ckpt / "model_TernaInfer_TernaryWeights.pt", map_location="cpu")
+                | torch.load(ckpt / "model_embeddings_and_norms_non_ternary.pt", map_location="cpu")
+            )
+
+        self.model_args = model_args
+        self.model = fast.Transformer(model_args, checkpoint).eval()
+        self.tokenizer = Tokenizer(str(Path(__file__).resolve().parent.parent / "tokenizer.model"))
+
+        self._cache = fast.make_cache(args=self.model_args, length=MAX_SEQ_LEN, device="cuda")
+
+    # ------------------------------------------------------------------
+    # Internal forward helpers
+    # ------------------------------------------------------------------
+
+    @torch.inference_mode()
+    def _prefill(self, token_ids: List[int]) -> torch.Tensor:
+        seq_len = len(token_ids)
+        bias = AttnBias.from_seqlens(
+            q_seqlen=[seq_len],
+            kv_seqlen=[seq_len],
+            kv_padding=MAX_SEQ_LEN,
+        )
+        bias.q_seqinfo.to("cuda")
+        bias.k_seqinfo.to("cuda")
+        tokens = torch.tensor(token_ids, dtype=torch.int32, device="cuda")
+        return self.model.forward_with_attn_bias(
+            token_values=tokens, attn_bias=bias, cache=self._cache
+        )
+
+    @torch.inference_mode()
+    def _generate(self, prompt_ids: List[int], max_new_tokens: int, until: List[str]) -> str:
+        max_total = min(len(prompt_ids) + max_new_tokens, self._max_seq_len)
+        max_new_tokens = max_total - len(prompt_ids)
+        prompt_len = len(prompt_ids)
+
+        stop_ids = {self.tokenizer.eos_id}
+        for s in until:
+            ids = self.tokenizer.encode(s, bos=False, eos=False)
+            if len(ids) == 1:
+                stop_ids.add(ids[0])
+
+        logits = self._prefill(prompt_ids)
+        next_token = int(logits[prompt_len - 1].argmax())
+
+        decode_bias = AttnBias.from_seqlens(
+            q_seqlen=[1],
+            kv_seqlen=[prompt_len + 1],
+            kv_padding=MAX_SEQ_LEN,
+        )
+        decode_bias.q_seqinfo.to("cuda")
+        decode_bias.k_seqinfo.to("cuda")
+
+        token_tensor = torch.tensor([next_token], dtype=torch.int32, device="cuda")
+        generated = [next_token]
+        kv_len = prompt_len + 1
+
+        for _ in range(max_new_tokens - 1):
+            if next_token in stop_ids:
+                break
+            token_tensor[0] = next_token
+            decode_bias.k_seqinfo.seqlen.fill_(kv_len)
+            logits = self.model.forward_with_attn_bias(
+                token_values=token_tensor, attn_bias=decode_bias, cache=self._cache
+            )
+            next_token = int(logits[0].argmax())
+            generated.append(next_token)
+            kv_len += 1
+
+        text = self.tokenizer.decode(generated)
+        for s in until:
+            if s in text:
+                text = text[:text.index(s)]
+        return text
+
+    # ------------------------------------------------------------------
+    # lm-eval API
+    # ------------------------------------------------------------------
+
+    def loglikelihood(self, requests) -> List[Tuple[float, bool]]:
+        results = []
+        for req in tqdm(requests, desc="loglikelihood"):
+            context, continuation = req.args
+            ctx_ids  = self.tokenizer.encode(context,      bos=False, eos=False)
+            cont_ids = self.tokenizer.encode(continuation, bos=False, eos=False)
+
+            max_ctx = self._max_seq_len - len(cont_ids) - 1
+            if len(ctx_ids) > max_ctx:
+                ctx_ids = ctx_ids[-max_ctx:]
+
+            full_ids = ctx_ids + cont_ids
+            ctx_len  = len(ctx_ids)
+            cont_len = len(cont_ids)
+
+            logits      = self._prefill(full_ids)
+            pred_logits = logits[ctx_len - 1 : ctx_len + cont_len - 1]
+            cont_tensor = torch.tensor(cont_ids, dtype=torch.long, device="cuda")
+
+            log_probs       = F.log_softmax(pred_logits, dim=-1)
+            token_log_probs = log_probs.gather(-1, cont_tensor.unsqueeze(-1)).squeeze(-1)
+            total_log_prob  = token_log_probs.sum().item()
+            is_greedy       = (pred_logits.argmax(dim=-1) == cont_tensor).all().item()
+
+            results.append((total_log_prob, bool(is_greedy)))
+        return results
+
+    def loglikelihood_rolling(self, requests):
+        raise NotImplementedError
+
+    def generate_until(self, requests) -> List[str]:
+        results = []
+        for req in tqdm(requests, desc="generate_until"):
+            context, gen_kwargs = req.args
+            max_new_tokens = gen_kwargs.get("max_gen_toks", self.max_gen_toks)
+            until = gen_kwargs.get("until", [])
+            if isinstance(until, str):
+                until = [until]
+
+            prompt_ids = self.tokenizer.encode(context, bos=False, eos=False)
+            if len(prompt_ids) > self._max_seq_len - max_new_tokens:
+                prompt_ids = prompt_ids[-(self._max_seq_len - max_new_tokens):]
+
+            results.append(self._generate(prompt_ids, max_new_tokens, until))
+        return results
+
+    @property
+    def eot_token_id(self):  return self.tokenizer.eos_id
+    @property
+    def max_length(self):    return self._max_seq_len
+    @property
+    def max_gen_toks(self):  return 512
+    @property
+    def batch_size(self):    return 1
+    @property
+    def device(self):        return "cuda"
+
+
+# ---------------------------------------------------------------------------
+# Evaluation runner
+# ---------------------------------------------------------------------------
+
+def evaluate(ckpt_dir: str, bf16: bool, tasks: List[str], limit: int = None):
+    from lm_eval.evaluator import simple_evaluate
+
+    label = "BF16" if bf16 else "TernaInfer"
+    print(f"\n{'='*60}\n  mode: {label}   tasks: {', '.join(tasks)}\n{'='*60}\n")
+
+    lm      = TernaInferLM(ckpt_dir=ckpt_dir, bf16=bf16)
+    summary = {}
+
+    for task in tasks:
+        fewshot = TASK_FEWSHOT.get(task, 0)
+        print(f"\n>>> {task} ({fewshot}-shot)")
+
+        results  = simple_evaluate(model=lm, tasks=[task], num_fewshot=fewshot,
+                                   limit=limit, log_samples=False)
+        task_res = results["results"].get(task, {})
+        acc = (task_res.get("acc,none")
+               or task_res.get("acc_norm,none")
+               or task_res.get("exact_match,none")
+               or task_res.get("acc"))
+
+        if acc is not None:
+            summary[task] = acc
+            print(f"  {task:<20} {acc*100:.2f}%")
+
+        if task == "mmlu":
+            for key, val in sorted(results["results"].items()):
+                if key.startswith("mmlu_") and key != "mmlu":
+                    subj_acc = val.get("acc,none", val.get("acc"))
+                    if subj_acc is not None:
+                        print(f"    {key.replace('mmlu_', ''):<43} {subj_acc*100:.1f}%")
+
+    print(f"\n{'='*60}\n  {label} summary\n{'='*60}")
+    for task in tasks:
+        if task in summary:
+            print(f"  {task:<20} {summary[task]*100:.2f}%")
+
+    return summary
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ckpt_dir", required=True)
+    parser.add_argument("--bf16",    action="store_true")
+    parser.add_argument("--both",    action="store_true")
+    parser.add_argument("--tasks",   default=",".join(TASKS))
+    parser.add_argument("--limit",   type=int, default=None)
+    args = parser.parse_args()
+
+    tasks = [t.strip() for t in args.tasks.split(",")]
+
+    if args.both:
+        summary_t = evaluate(args.ckpt_dir, bf16=False, tasks=tasks, limit=args.limit)
+        summary_b = evaluate(args.ckpt_dir, bf16=True,  tasks=tasks, limit=args.limit)
+
+        print(f"\n{'='*60}\n  comparison\n{'='*60}")
+        print(f"  {'task':<20} {'TernaInfer':>14} {'BF16':>8} {'delta':>8}")
+        print(f"  {'-'*52}")
+        for task in tasks:
+            t, b = summary_t.get(task), summary_b.get(task)
+            if t is not None and b is not None:
+                print(f"  {task:<20} {t*100:>13.2f}% {b*100:>7.2f}% {(t-b)*100:>+7.2f}%")
+            else:
+                print(f"  {task:<20} {'N/A':>14} {'N/A':>8}")
+    else:
+        evaluate(args.ckpt_dir, bf16=args.bf16, tasks=tasks, limit=args.limit)
