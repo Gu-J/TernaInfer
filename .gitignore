@@ -2,7 +2,7 @@ chat.sh
 
 kernels/*.so
 
-kernels/test_kernel
+tests/test_kernel
 
 __pycache__/
 **/__pycache__/

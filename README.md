@@ -15,7 +15,7 @@ bash compile.sh
 cd ..
 
 # Run a simple test
-./kernels/test_kernel 8 2560 2560 45 7
+./tests/test_kernel 8 2560 2560 45 7
 
 ```
 
@@ -41,6 +41,16 @@ python ./generate.py ./checkpoints/ --interactive --chat_format
 python ./generate.py ./checkpoints/ --interactive --chat_format --BF16
 
 ```
+
+## Accuracy
+
+Due to the use of custom GPU kernels, TernaSpMM may introduce minor rounding differences compared to BF16 GEMM. As a result, TernaInfer can produce slightly different outputs from BF16 inference in some cases. These differences are small and lead to only marginal variations in benchmark scores on the following datasets. Evaluation scripts are provided in the `/tests` directory. 
+
+| Method      | WikiText (PPL)   | ARC-Challenge          | HellaSwag         | MMLU         |
+|-------------|------------------|------------------------|-------------------|--------------|
+| BF16        | 16.1948          | 51.02                  | 50.71             | 53.38        |
+| TernaInfer  | 16.1959          | 50.77                  | 50.69             | 53.27        |
+| Δ (%)       | 0.0006%          | 0.5096%                | 0.0394%           | 0.2061%      |
 
 ## Acknowledgements
 

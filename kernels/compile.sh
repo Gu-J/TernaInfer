@@ -9,8 +9,13 @@ nvcc -std=c++17 -Xcudafe --diag_suppress=177 --compiler-options -fPIC -lineinfo 
 
 
 
-nvcc test_kernel.cu -L. -lternaspmm -lcublas -o test_kernel \
+# nvcc test_kernel.cu -L. -lternaspmm -lcublas -o test_kernel \
+#     -arch=sm_86 \
+#     -Xlinker -rpath -Xlinker '$ORIGIN'
+
+
+nvcc ../tests/test_kernel.cu \
+    -L. -lternaspmm -lcublas \
+    -o ../tests/test_kernel \
     -arch=sm_86 \
-    -Xlinker -rpath -Xlinker '$ORIGIN'
-
-
+    -Xlinker -rpath -Xlinker '$ORIGIN/../kernels'

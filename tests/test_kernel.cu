@@ -14,10 +14,8 @@
  
 
 // Performs: O = x @ WT, where x is [M,K], W is [N,K] and O is [M,N]
-// Correct input format: ./spmm_test M N K Sparsity SplitK
-
-// nvcc test_kernel.cu -L. -lternaspmm -lcublas -o test_kernel -arch=sm_86
-// ./test_kernel 8 2560 2560 45 7
+// Input format: ./test_kernel M N K Sparsity SplitK
+// Example:      ./test_kernel 8 2560 2560 45 7
 
 #include <assert.h>
 #include <cublas_v2.h>
@@ -53,9 +51,11 @@
 extern "C" void checkLastCudaError(int line);
 
 extern "C" void bitlinear_TernaSpMM(int8_t* input0, 
-                                    uint32_t* myCompressed_Val_gpu_v3, int* mybitmap_TileOffsets_global_gpu_v3,uint16_t*mybitmap_TileOffsets_median_gpu_v3,uint64_t*mybitmap_gpu_v3,
+                                    uint32_t* Compressed_Val_gpu_v3, int* bitmap_TileOffsets_global_gpu_v3,uint16_t* bitmap_TileOffsets_median_gpu_v3,uint64_t* bitmap_gpu_v3,
                                     __nv_bfloat16* output0, 
-                                    __nv_bfloat16* s, __nv_bfloat16* ws, int ws_num, int M, int N, int K, int SPLIT_K,int32_t* myReduction_Workspace_bitmapv3,cudaStream_t stream);
+                                    __nv_bfloat16* s, __nv_bfloat16* ws, int ws_num, 
+                                    int M, int N, int K, int SPLIT_K, int32_t* Reduction_Workspace_bitmapv3,
+                                    cudaStream_t stream);
 
 extern "C" int myInitSparseMatrix_bitmap(
     __nv_bfloat16* A_h,
@@ -79,9 +79,7 @@ extern "C" void reorder_WT_h(__nv_bfloat16* WT_h, __nv_bfloat16* reordered_WT_h,
 
 __host__ void myinit_host_matrices(__nv_bfloat16* x_h, __nv_bfloat16* WT_h, int M, int N, int K, int WEIGHT_SPARSITY)
 {
-    for (int i = 0; i < M * K; i++)
-        // x_h[i] = __float2bfloat16_rn(static_cast<float>((rand() % 256)-128));
-        x_h[i] = __float2bfloat16_rn(1);
+    for (int i = 0; i < M * K; i++)x_h[i] = __float2bfloat16_rn(1);
 
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < K; j++) {
