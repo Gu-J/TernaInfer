@@ -50,34 +50,33 @@
 
 extern "C" void checkLastCudaError(int line);
 
-extern "C" void bitlinear_TernaSpMM(int8_t* input0, 
-                                    uint32_t* Compressed_Val_gpu_v3, int* bitmap_TileOffsets_global_gpu_v3,uint16_t* bitmap_TileOffsets_median_gpu_v3,uint64_t* bitmap_gpu_v3,
-                                    __nv_bfloat16* output0, 
+extern "C" void bitlinear_TernaSpMM(int8_t* input, 
+                                    uint64_t* bitmap_gpu_v3, int* bitmap_TileOffsets_global_gpu_v3, uint16_t* bitmap_TileOffsets_median_gpu_v3, uint32_t* Compressed_Val_gpu_v3,
+                                    __nv_bfloat16* output, 
                                     __nv_bfloat16* s, __nv_bfloat16* ws, int ws_num, 
                                     int M, int N, int K, int SPLIT_K, int32_t* Reduction_Workspace_bitmapv3,
                                     cudaStream_t stream);
 
-extern "C" int myInitSparseMatrix_bitmap(
+extern "C" int convert_reorderd(
     __nv_bfloat16* A_h,
     int M,
     int K,
-    int tile_M,  // 8
-    int tile_M_median,  // 16
     int tile_M_global,  // 64
-    int tile_K,  // 8
-    int tile_K_median,  // 64
+    int tile_M_median,  // 16
+    int tile_M,  // 8
     int tile_K_global,  // 64
-    uint32_t** Compressed_Val,
-    int** TileOffsets,
-    uint16_t** TileOffsets_median,
-    int** TileOffsets_global,
+    int tile_K_median,  // 64
+    int tile_K,  // 8
     uint64_t** bitmap,
+    int** TileOffsets_global,
+    uint16_t** TileOffsets_median,
+    uint32_t** Compressed_Val,
     int& max_nnz_count);
 
 extern "C" void reorder_WT_h(__nv_bfloat16* WT_h, __nv_bfloat16* reordered_WT_h, int N, int K);
 
 
-__host__ void myinit_host_matrices(__nv_bfloat16* x_h, __nv_bfloat16* WT_h, int M, int N, int K, int WEIGHT_SPARSITY)
+__host__ void init_host_matrices(__nv_bfloat16* x_h, __nv_bfloat16* WT_h, int M, int N, int K, int WEIGHT_SPARSITY)
 {
     for (int i = 0; i < M * K; i++)x_h[i] = __float2bfloat16_rn(1);
 
@@ -140,7 +139,7 @@ int main(int argc, char** argv)
         exit(-1);
     }
     
-    myinit_host_matrices(x_h, WT_h, M, N, K, WEIGHT_SPARSITY);
+    init_host_matrices(x_h, WT_h, M, N, K, WEIGHT_SPARSITY);
     
     cudaMemcpy(x, x_h, sizeof(__nv_bfloat16) * M * K, cudaMemcpyHostToDevice);
     cudaMemcpy(WT, WT_h, sizeof(__nv_bfloat16) * N * K, cudaMemcpyHostToDevice);
@@ -232,33 +231,28 @@ int main(int argc, char** argv)
 
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
-// my
 
-    __nv_bfloat16* myX_SpMM_bitmapv3 = NULL;
-    cudaMalloc(reinterpret_cast<void**>(&myX_SpMM_bitmapv3), sizeof(__nv_bfloat16) * M * N);
-    if (myX_SpMM_bitmapv3 == NULL) {
+    __nv_bfloat16* X_TernaSpMM = NULL;
+    cudaMalloc(reinterpret_cast<void**>(&X_TernaSpMM), sizeof(__nv_bfloat16) * M * N);
+    if (X_TernaSpMM == NULL) {
         printf("Error in spmm_test.cu: line %d cudaMalloc falied\n", __LINE__);
         exit(-1);
     }
-    cudaMemset(myX_SpMM_bitmapv3, 0, sizeof(__nv_bfloat16) * M * N);
+    cudaMemset(X_TernaSpMM, 0, sizeof(__nv_bfloat16) * M * N);
 
     // Define the output pointer
-    uint32_t* myCompressed_Val_cpu_v3 = nullptr;
-    int* mybitmap_TileOffsets_cpu_v3 = nullptr;
-    // int* mybitmap_TileOffsets_median_cpu_v3 = nullptr;
-    // my idea
-    uint16_t* mybitmap_TileOffsets_median_cpu_v3 = nullptr;
+    uint32_t* Values_Array_h = nullptr;
+    uint16_t* WarpOffsets_h = nullptr;
     int* mybitmap_TileOffsets_global_cpu_v3 = nullptr;
     uint64_t* mybitmap_cpu_v3 = nullptr;
     int mymax_nnz_intilev3 = 0;
-    // Call the InitSparseMatrixA_bitmap_v6 function
     
-    // my reordering
+    // reordering
     __nv_bfloat16* reordered_WT_h=nullptr;
     reordered_WT_h = (__nv_bfloat16*)malloc(sizeof(__nv_bfloat16) * N * K);
     reorder_WT_h(WT_h,reordered_WT_h,N,K);
 
-    auto mynum_gtilesv3 = myInitSparseMatrix_bitmap(reordered_WT_h, N, K, 8, 16, 64, 8, 64, 64, &myCompressed_Val_cpu_v3, &mybitmap_TileOffsets_cpu_v3, &mybitmap_TileOffsets_median_cpu_v3, &mybitmap_TileOffsets_global_cpu_v3, &mybitmap_cpu_v3, mymax_nnz_intilev3);
+    auto mynum_gtilesv3 = convert_reorderd(reordered_WT_h, N, K, 64, 16, 8, 64, 64, 8, &mybitmap_cpu_v3, &mybitmap_TileOffsets_global_cpu_v3, &WarpOffsets_h, &Values_Array_h, mymax_nnz_intilev3);
 
     auto mylocal_tile_numv3 = 8*8;
     auto mymedian_tile_numv3 = 4*1;
@@ -266,7 +260,7 @@ int main(int argc, char** argv)
     auto mynum_mtilesv3 = mynum_gtilesv3 * mymedian_tile_numv3/4*3;
     // The offset of the last tile is equal to the total number of compressed non-zero values
     int myval_count_v3 = mybitmap_TileOffsets_global_cpu_v3[mynum_gtilesv3]; 
-    uint16_t myval_count_median_v3 = mybitmap_TileOffsets_median_cpu_v3[mynum_mtilesv3];
+    uint16_t myval_count_median_v3 = WarpOffsets_h[mynum_mtilesv3];
     // Adjust max_nnz_intilev3 to a multiple of 64
     if (mymax_nnz_intilev3 % 64 != 0) {
         mymax_nnz_intilev3 = ((mymax_nnz_intilev3 / 64) + 1) * 64;
@@ -306,10 +300,10 @@ int main(int argc, char** argv)
 
     PROFILE_MEMCPY(WarpOffsets,
                 mybitmap_TileOffsets_median_gpu_v3,
-                mybitmap_TileOffsets_median_cpu_v3,
+                WarpOffsets_h,
                 sizeof(uint16_t) * mynum_mtilesv3,
                 cudaMemcpyHostToDevice);
-    free(mybitmap_TileOffsets_median_cpu_v3);
+    free(WarpOffsets_h);
 
     PROFILE_MEMCPY(Global_Bitmap,
                 mybitmap_gpu_v3,
@@ -320,10 +314,10 @@ int main(int argc, char** argv)
 
     PROFILE_MEMCPY(Global_Values_Array,
                 myCompressed_Val_gpu_v3,
-                myCompressed_Val_cpu_v3,
+                Values_Array_h,
                 myval_count_v3/8,
                 cudaMemcpyHostToDevice);
-    free(myCompressed_Val_cpu_v3);
+    free(Values_Array_h);
 
     PROFILE_MEMCPY(Input_Activation,
                 myx,
@@ -359,11 +353,11 @@ int main(int argc, char** argv)
     for (int i = 0; i < WARM_UP_ITERATION; i++)
         bitlinear_TernaSpMM(
                         myx,
-                        myCompressed_Val_gpu_v3, // half
+                        mybitmap_gpu_v3, //uint64
                         mybitmap_TileOffsets_global_gpu_v3, // int
                         mybitmap_TileOffsets_median_gpu_v3, // int
-                        mybitmap_gpu_v3, //uint64
-                        myX_SpMM_bitmapv3,
+                        myCompressed_Val_gpu_v3, // half
+                        X_TernaSpMM,
                         s,
                         ws,
                         4,
@@ -378,11 +372,11 @@ int main(int argc, char** argv)
     for (int i = 0; i < BENCHMARK_ITERATION; i++)
         bitlinear_TernaSpMM(
                         myx,
-                        myCompressed_Val_gpu_v3, // half
+                        mybitmap_gpu_v3, //uint64
                         mybitmap_TileOffsets_global_gpu_v3, // int
                         mybitmap_TileOffsets_median_gpu_v3, // int
-                        mybitmap_gpu_v3, //uint64
-                        myX_SpMM_bitmapv3,
+                        myCompressed_Val_gpu_v3, // half
+                        X_TernaSpMM,
                         s,
                         ws,
                         4,
@@ -405,8 +399,8 @@ int main(int argc, char** argv)
         / 1e12;
     __nv_bfloat16* myX_SpMM_hbitmapv3 = NULL;  // col major
     myX_SpMM_hbitmapv3       = (__nv_bfloat16*)malloc(sizeof(__nv_bfloat16) * M * N);
-    cudaMemcpy(myX_SpMM_hbitmapv3, myX_SpMM_bitmapv3, sizeof(__nv_bfloat16) * M * N, cudaMemcpyDeviceToHost);  // Col Major
-    cudaFree(myX_SpMM_bitmapv3);
+    cudaMemcpy(myX_SpMM_hbitmapv3, X_TernaSpMM, sizeof(__nv_bfloat16) * M * N, cudaMemcpyDeviceToHost);  // Col Major
+    cudaFree(X_TernaSpMM);
     cudaFree(mybitmap_TileOffsets_global_gpu_v3);
     cudaFree(mybitmap_TileOffsets_median_gpu_v3);
     cudaFree(mybitmap_gpu_v3);

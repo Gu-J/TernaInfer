@@ -75,10 +75,10 @@ def TernaInfer_linear(  input,
 
     TernaSpMM_lib.bitlinear_TernaSpMM(
         ctypes.c_void_p(input_padded.data_ptr()),
-        ctypes.c_void_p(compressed_val.data_ptr()),
+        ctypes.c_void_p(bitmap.data_ptr()),
         ctypes.c_void_p(TileOffsets_global.data_ptr()),
         ctypes.c_void_p(TileOffsets_median.data_ptr()),
-        ctypes.c_void_p(bitmap.data_ptr()),
+        ctypes.c_void_p(compressed_val.data_ptr()),
         ctypes.c_void_p(ret_padded.data_ptr()),
         ctypes.c_void_p(s.data_ptr()),
         ctypes.c_void_p(ws.data_ptr()),

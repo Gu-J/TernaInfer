@@ -27,7 +27,7 @@ USE_CUDA_GRAPH=True
 
 @dataclass
 class GenArgs:
-    gen_length: int = 64*64
+    gen_length: int = 64
     gen_bsz: int = 1
     prompt_length: int = 2048
 

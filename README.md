@@ -1,10 +1,13 @@
 # TernaInfer
 
-This repository is tailored for use with the [BitNet-b1.58-2B-4T](https://arxiv.org/abs/2504.12285) model.
+This repository contains the implementation of the paper 
+"TernaInfer: Pushing the Compression Boundary of Ternary LLMs towards 1.58-Bit GPU Inference".
+
+The implementation is developed for the [BitNet-b1.58-2B-4T](https://huggingface.co/microsoft/bitnet-b1.58-2B-4T) model.
 
 ## Usage
 
-Build the kernel:
+Build kernels:
 
 ```bash
 # Build libternaspmm.so
